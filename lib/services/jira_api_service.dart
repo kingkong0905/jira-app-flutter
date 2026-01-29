@@ -355,6 +355,62 @@ class JiraApiService {
     }
   }
 
+  /// Create a new sprint. POST /rest/agile/1.0/sprint
+  Future<String?> createSprint({
+    required int boardId,
+    required String name,
+    String? goal,
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'name': name,
+        'originBoardId': boardId,
+      };
+
+      if (goal != null && goal.isNotEmpty) {
+        body['goal'] = goal;
+      }
+
+      if (startDate != null && startDate.isNotEmpty) {
+        body['startDate'] = startDate;
+      }
+
+      if (endDate != null && endDate.isNotEmpty) {
+        body['endDate'] = endDate;
+      }
+
+      final r = await http.post(
+        Uri.parse('$_baseUrl/rest/agile/1.0/sprint'),
+        headers: _headers,
+        body: jsonEncode(body),
+      ).timeout(_timeout);
+
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        clearCache();
+        return null; // Success
+      }
+
+      // Parse error message
+      try {
+        final errorJson = jsonDecode(r.body) as Map<String, dynamic>;
+        final errorMessages = errorJson['errorMessages'] as List<dynamic>?;
+        if (errorMessages != null && errorMessages.isNotEmpty) {
+          return errorMessages.join(', ');
+        }
+        final errors = errorJson['errors'] as Map<String, dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          return errors.values.join(', ');
+        }
+      } catch (_) {}
+
+      return 'Failed to create sprint: ${r.statusCode}';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<List<JiraIssue>> getSprintIssues(
     int boardId,
     int sprintId, {
@@ -609,6 +665,171 @@ class JiraApiService {
         .timeout(_timeout);
     if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
     clearCache();
+  }
+
+  /// Get issue types for a project. GET /rest/api/3/project/{projectKey}/statuses
+  Future<List<Map<String, dynamic>>> getIssueTypesForProject(String projectKey) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/rest/api/3/project/$projectKey/statuses'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode != 200) return [];
+      final list = jsonDecode(r.body) as List<dynamic>?;
+      if (list == null) return [];
+      return list.map((e) => {
+        'id': e['id'].toString(),
+        'name': stringFromJson(e['name']) ?? '',
+        'description': stringFromJson(e['description']) ?? '',
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Get assignable users for a project. GET /rest/api/3/user/assignable/search
+  Future<List<JiraUser>> getAssignableUsersForProject(String projectKey, {String? query}) async {
+    try {
+      final params = <String, String>{'project': projectKey, 'maxResults': '50'};
+      if (query != null && query.isNotEmpty) params['query'] = query;
+      final uri = Uri.parse('$_baseUrl/rest/api/3/user/assignable/search').replace(queryParameters: params);
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode != 200) return [];
+      final list = jsonDecode(r.body) as List<dynamic>?;
+      if (list == null) return [];
+      return list.map((e) => JiraUser.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Search issues with JQL. POST /rest/api/3/search/jql (matching React Native implementation)
+  Future<List<JiraIssue>> searchIssues(String jql, {int maxResults = 50}) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/rest/api/3/search/jql');
+      final body = jsonEncode({
+        'jql': jql,
+        'maxResults': maxResults,
+        'fields': ['summary', 'description', 'status', 'priority', 'assignee', 'issuetype', 'created', 'updated'],
+      });
+      final r = await http.post(
+        uri,
+        headers: {..._headers, 'Content-Type': 'application/json'},
+        body: body,
+      ).timeout(_timeout);
+      
+      if (r.statusCode != 200) {
+        debugPrint('JQL search error: ${r.statusCode} ${r.body}');
+        return [];
+      }
+      
+      final json = jsonDecode(r.body) as Map<String, dynamic>;
+      final list = (json['issues'] as List<dynamic>?) ?? [];
+      return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (e) {
+      debugPrint('JQL search exception: $e');
+      return [];
+    }
+  }
+
+  /// Create a new issue. POST /rest/api/3/issue
+  Future<String?> createIssue({
+    required String projectKey,
+    required String issueTypeId,
+    required String summary,
+    String? description,
+    Map<String, dynamic>? descriptionAdf,
+    String? assigneeAccountId,
+    String? priorityId,
+    String? dueDate,
+    double? storyPoints,
+    int? sprintId,
+    String? parentKey,
+  }) async {
+    try {
+      final fields = <String, dynamic>{
+        'project': {'key': projectKey},
+        'issuetype': {'id': issueTypeId},
+        'summary': summary,
+      };
+
+      if (descriptionAdf != null) {
+        fields['description'] = descriptionAdf;
+      } else if (description != null && description.isNotEmpty) {
+        fields['description'] = descriptionAdfFromPlainText(description);
+      }
+
+      if (assigneeAccountId != null && assigneeAccountId.isNotEmpty) {
+        fields['assignee'] = {'accountId': assigneeAccountId};
+      }
+
+      if (priorityId != null && priorityId.isNotEmpty) {
+        fields['priority'] = {'id': priorityId};
+      }
+
+      if (dueDate != null && dueDate.isNotEmpty) {
+        fields['duedate'] = dueDate;
+      }
+
+      if (storyPoints != null) {
+        fields['customfield_10016'] = storyPoints;
+      }
+
+      if (parentKey != null && parentKey.isNotEmpty) {
+        fields['parent'] = {'key': parentKey};
+      }
+
+      final body = jsonEncode({'fields': fields});
+      final r = await http.post(
+        Uri.parse('$_baseUrl/rest/api/3/issue'),
+        headers: _headers,
+        body: body,
+      ).timeout(_timeout);
+
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        final responseJson = jsonDecode(r.body) as Map<String, dynamic>;
+        final issueKey = responseJson['key'] as String?;
+        
+        // If sprint is specified, move the issue to the sprint
+        if (sprintId != null && issueKey != null) {
+          await _moveIssueToSprint(issueKey, sprintId);
+        }
+        
+        clearCache();
+        return null;
+      }
+
+      // Parse error message
+      try {
+        final errorJson = jsonDecode(r.body) as Map<String, dynamic>;
+        final errorMessages = errorJson['errorMessages'] as List<dynamic>?;
+        if (errorMessages != null && errorMessages.isNotEmpty) {
+          return errorMessages.join(', ');
+        }
+        final errors = errorJson['errors'] as Map<String, dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          return errors.values.join(', ');
+        }
+      } catch (_) {}
+      
+      return 'Failed to create issue: ${r.statusCode}';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Move an issue to a sprint. POST /rest/agile/1.0/sprint/{sprintId}/issue
+  Future<void> _moveIssueToSprint(String issueKey, int sprintId) async {
+    try {
+      final body = jsonEncode({'issues': [issueKey]});
+      await http.post(
+        Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId/issue'),
+        headers: _headers,
+        body: body,
+      ).timeout(_timeout);
+    } catch (_) {
+      // Ignore errors when moving to sprint
+    }
   }
 }
 
