@@ -17,6 +17,10 @@ echo "==> Dependencies..."
 flutter pub get
 
 echo ""
+echo "==> Generating app icons..."
+dart run flutter_launcher_icons
+
+echo ""
 echo "==> Connected devices:"
 flutter devices
 

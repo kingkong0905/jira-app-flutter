@@ -13,6 +13,9 @@ flutter clean
 echo "==> Getting dependencies..."
 flutter pub get
 
+echo "==> Generating app icons..."
+dart run flutter_launcher_icons
+
 echo "==> Updating CocoaPods repo (so pod install can resolve sqlite3)..."
 (cd macos && pod repo update)
 
