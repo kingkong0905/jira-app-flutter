@@ -1,5 +1,25 @@
 /// Jira domain models matching the reference React Native app (kingkong0905/jira-app).
 
+/// Safely coerce API value to String? (Jira sometimes returns Map/ADF instead of string).
+String? stringFromJson(dynamic v) {
+  if (v == null) return null;
+  if (v is String) return v;
+  if (v is Map) {
+    final p = v['plain'] ?? v['value'] ?? v['name'] ?? v['displayName'] ?? v['text'];
+    return stringFromJson(p);
+  }
+  return v.toString();
+}
+
+/// Safely coerce API value to int? (JSON numbers are often decoded as double).
+int? intFromJson(dynamic v) {
+  if (v == null) return null;
+  if (v is int) return v;
+  if (v is double) return v.toInt();
+  if (v is String) return int.tryParse(v);
+  return null;
+}
+
 class JiraConfig {
   final String email;
   final String jiraUrl;
@@ -27,9 +47,9 @@ class JiraBoard {
 
   factory JiraBoard.fromJson(Map<String, dynamic> json) {
     return JiraBoard(
-      id: json['id'] as int,
-      name: json['name'] as String? ?? '',
-      type: json['type'] as String? ?? 'scrum',
+      id: intFromJson(json['id']) ?? 0,
+      name: stringFromJson(json['name']) ?? '',
+      type: stringFromJson(json['type']) ?? 'scrum',
       location: json['location'] != null
           ? JiraBoardLocation.fromJson(json['location'] as Map<String, dynamic>)
           : null,
@@ -45,8 +65,8 @@ class JiraBoardLocation {
 
   factory JiraBoardLocation.fromJson(Map<String, dynamic> json) {
     return JiraBoardLocation(
-      projectKey: json['projectKey'] as String?,
-      projectName: json['projectName'] as String?,
+      projectKey: stringFromJson(json['projectKey']),
+      projectName: stringFromJson(json['projectName']),
     );
   }
 }
@@ -64,8 +84,8 @@ class JiraIssue {
 
   factory JiraIssue.fromJson(Map<String, dynamic> json) {
     return JiraIssue(
-      id: json['id'] as String? ?? '',
-      key: json['key'] as String? ?? '',
+      id: stringFromJson(json['id']) ?? '',
+      key: stringFromJson(json['key']) ?? '',
       fields: JiraIssueFields.fromJson(
         json['fields'] as Map<String, dynamic>? ?? {},
       ),
@@ -73,9 +93,49 @@ class JiraIssue {
   }
 }
 
+/// Attachment on an issue (Jira REST API v3).
+class JiraAttachment {
+  final String id;
+  final String filename;
+  final String mimeType;
+  final String content; // URL to download (requires auth)
+  final int? size;
+  final String? thumbnail;
+
+  JiraAttachment({
+    required this.id,
+    required this.filename,
+    required this.mimeType,
+    required this.content,
+    this.size,
+    this.thumbnail,
+  });
+
+  factory JiraAttachment.fromJson(Map<String, dynamic> json) {
+    return JiraAttachment(
+      id: stringFromJson(json['id']) ?? '',
+      filename: stringFromJson(json['filename']) ?? '',
+      mimeType: stringFromJson(json['mimeType']) ?? 'application/octet-stream',
+      content: stringFromJson(json['content']) ?? '',
+      size: intFromJson(json['size']),
+      thumbnail: stringFromJson(json['thumbnail']),
+    );
+  }
+
+  static List<JiraAttachment> fromJsonList(dynamic v) {
+    if (v == null) return [];
+    if (v is! List) return [];
+    return v
+        .whereType<Map<String, dynamic>>()
+        .map((e) => JiraAttachment.fromJson(e))
+        .toList();
+  }
+}
+
 class JiraIssueFields {
   final String summary;
-  final String? description;
+  /// Description: String (plain) or Map (ADF). Stored raw for display/edit.
+  final dynamic description;
   final JiraStatus status;
   final JiraPriority? priority;
   final JiraUser? assignee;
@@ -87,6 +147,8 @@ class JiraIssueFields {
   final int? customfield_10016; // Story points
   final JiraSprintRef? sprint;
   final JiraIssueParent? parent;
+  /// Nullable for backward compatibility with cached/older parsed issues that may lack this field.
+  final List<JiraAttachment>? attachment;
 
   JiraIssueFields({
     required this.summary,
@@ -102,12 +164,13 @@ class JiraIssueFields {
     this.customfield_10016,
     this.sprint,
     this.parent,
+    this.attachment = const [],
   });
 
   factory JiraIssueFields.fromJson(Map<String, dynamic> json) {
     return JiraIssueFields(
-      summary: json['summary'] as String? ?? '',
-      description: json['description'] as String?,
+      summary: stringFromJson(json['summary']) ?? '',
+      description: json['description'],
       status: json['status'] != null
           ? JiraStatus.fromJson(json['status'] as Map<String, dynamic>)
           : JiraStatus(name: 'Unknown', statusCategory: JiraStatusCategory(colorName: 'gray', key: 'unknown')),
@@ -123,14 +186,15 @@ class JiraIssueFields {
       issuetype: json['issuetype'] != null
           ? JiraIssueType.fromJson(json['issuetype'] as Map<String, dynamic>)
           : JiraIssueType(name: 'Task', iconUrl: ''),
-      created: json['created'] as String? ?? '',
-      updated: json['updated'] as String? ?? '',
-      duedate: json['duedate'] as String?,
-      customfield_10016: json['customfield_10016'] as int?,
+      created: stringFromJson(json['created']) ?? '',
+      updated: stringFromJson(json['updated']) ?? '',
+      duedate: stringFromJson(json['duedate']),
+      customfield_10016: intFromJson(json['customfield_10016']),
       sprint: _parseSprint(json['sprint']),
       parent: json['parent'] != null
           ? JiraIssueParent.fromJson(json['parent'] as Map<String, dynamic>)
           : null,
+      attachment: JiraAttachment.fromJsonList(json['attachment']),
     );
   }
 
@@ -152,7 +216,7 @@ class JiraStatus {
 
   factory JiraStatus.fromJson(Map<String, dynamic> json) {
     return JiraStatus(
-      name: json['name'] as String? ?? '',
+      name: stringFromJson(json['name']) ?? '',
       statusCategory: json['statusCategory'] != null
           ? JiraStatusCategory.fromJson(json['statusCategory'] as Map<String, dynamic>)
           : JiraStatusCategory(colorName: 'gray', key: 'unknown'),
@@ -168,8 +232,8 @@ class JiraStatusCategory {
 
   factory JiraStatusCategory.fromJson(Map<String, dynamic> json) {
     return JiraStatusCategory(
-      colorName: json['colorName'] as String? ?? 'gray',
-      key: json['key'] as String?,
+      colorName: stringFromJson(json['colorName']) ?? 'gray',
+      key: stringFromJson(json['key']),
     );
   }
 }
@@ -182,8 +246,8 @@ class JiraPriority {
 
   factory JiraPriority.fromJson(Map<String, dynamic> json) {
     return JiraPriority(
-      name: json['name'] as String? ?? 'Medium',
-      iconUrl: json['iconUrl'] as String?,
+      name: stringFromJson(json['name']) ?? 'Medium',
+      iconUrl: stringFromJson(json['iconUrl']),
     );
   }
 }
@@ -210,9 +274,9 @@ class JiraUser {
       urls = av.map((k, v) => MapEntry(k.toString(), v.toString()));
     }
     return JiraUser(
-      accountId: json['accountId'] as String? ?? '',
-      displayName: json['displayName'] as String? ?? '',
-      emailAddress: json['emailAddress'] as String?,
+      accountId: stringFromJson(json['accountId']) ?? '',
+      displayName: stringFromJson(json['displayName']) ?? '',
+      emailAddress: stringFromJson(json['emailAddress']),
       avatarUrls: urls,
     );
   }
@@ -226,8 +290,8 @@ class JiraIssueType {
 
   factory JiraIssueType.fromJson(Map<String, dynamic> json) {
     return JiraIssueType(
-      name: json['name'] as String? ?? 'Task',
-      iconUrl: json['iconUrl'] as String?,
+      name: stringFromJson(json['name']) ?? 'Task',
+      iconUrl: stringFromJson(json['iconUrl']),
     );
   }
 }
@@ -241,9 +305,9 @@ class JiraSprintRef {
 
   factory JiraSprintRef.fromJson(Map<String, dynamic> json) {
     return JiraSprintRef(
-      id: json['id'] as int? ?? 0,
-      name: json['name'] as String? ?? '',
-      state: json['state'] as String? ?? 'unknown',
+      id: intFromJson(json['id']) ?? 0,
+      name: stringFromJson(json['name']) ?? '',
+      state: stringFromJson(json['state']) ?? 'unknown',
     );
   }
 }
@@ -258,9 +322,9 @@ class JiraIssueParent {
   factory JiraIssueParent.fromJson(Map<String, dynamic> json) {
     final fields = json['fields'] as Map<String, dynamic>?;
     return JiraIssueParent(
-      id: json['id'] as String? ?? '',
-      key: json['key'] as String? ?? '',
-      summary: fields?['summary'] as String?,
+      id: stringFromJson(json['id']) ?? '',
+      key: stringFromJson(json['key']) ?? '',
+      summary: fields != null ? stringFromJson(fields['summary']) : null,
     );
   }
 }
@@ -284,12 +348,12 @@ class JiraSprint {
 
   factory JiraSprint.fromJson(Map<String, dynamic> json) {
     return JiraSprint(
-      id: json['id'] as int? ?? 0,
-      name: json['name'] as String? ?? '',
-      state: json['state'] as String? ?? 'unknown',
-      startDate: json['startDate'] as String?,
-      endDate: json['endDate'] as String?,
-      goal: json['goal'] as String?,
+      id: intFromJson(json['id']) ?? 0,
+      name: stringFromJson(json['name']) ?? '',
+      state: stringFromJson(json['state']) ?? 'unknown',
+      startDate: stringFromJson(json['startDate']),
+      endDate: stringFromJson(json['endDate']),
+      goal: stringFromJson(json['goal']),
     );
   }
 }

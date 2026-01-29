@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _boardsStartAt = 0;
   bool _hasMoreBoards = true;
   bool _loadingMoreBoards = false;
-  int _activeTab = 0; // 0 = Board, 1 = Backlog
+  int _activeTab = 0; // 0 = Board, 1 = Backlog, 2 = Timeline
   bool _boardDropdownOpen = false;
 
   @override
@@ -135,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _sprints = sprintsData;
           _activeSprint = sprintsData.where((s) => s.state == 'active').firstOrNull;
         });
-        if (_activeTab == 0 && _activeSprint != null) {
+        if ((_activeTab == 0 || _activeTab == 2) && _activeSprint != null) {
           final issues = await api.getSprintIssues(
             boardId,
             _activeSprint!.id,
@@ -162,9 +162,17 @@ class _HomeScreenState extends State<HomeScreen> {
           });
           return;
         }
+        // Scrum but no active sprint for Board/Timeline: show empty
+        setState(() {
+          _issues = [];
+          _assignees = assigneesData;
+          _loading = false;
+        });
+        return;
       }
 
-      final issues = await api.getBoardIssues(boardId);
+      final assigneeParam = _selectedAssignee == 'all' ? null : _selectedAssignee;
+      final issues = await api.getBoardIssues(boardId, assignee: assigneeParam);
       setState(() {
         _sprints = [];
         _activeSprint = null;
@@ -209,6 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<JiraIssue> get _displayIssues {
     if (_activeTab == 1) return _backlogIssues;
+    // Board and Timeline both use _issues (sprint for scrum, board for kanban)
     return _issues;
   }
 
@@ -226,6 +235,50 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final i in _filteredIssues) {
       final s = i.fields.status.name;
       map.putIfAbsent(s, () => []).add(i);
+    }
+    return map;
+  }
+
+  /// Timeline groups: Overdue, Today, This week, Next week, Later, No due date
+  Map<String, List<JiraIssue>> get _groupedByDueDate {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final endOfWeek = today.add(const Duration(days: 7));
+    final endOfNextWeek = today.add(const Duration(days: 14));
+    final map = <String, List<JiraIssue>>{
+      'Overdue': [],
+      'Today': [],
+      'This week': [],
+      'Next week': [],
+      'Later': [],
+      'No due date': [],
+    };
+    for (final i in _filteredIssues) {
+      final d = i.fields.duedate;
+      if (d == null || d.isEmpty) {
+        map['No due date']!.add(i);
+        continue;
+      }
+      DateTime? parsed;
+      try {
+        parsed = DateTime.parse(d);
+      } catch (_) {}
+      if (parsed == null) {
+        map['No due date']!.add(i);
+        continue;
+      }
+      final day = DateTime(parsed.year, parsed.month, parsed.day);
+      if (day.isBefore(today)) {
+        map['Overdue']!.add(i);
+      } else if (day == today) {
+        map['Today']!.add(i);
+      } else if (day.isBefore(endOfWeek)) {
+        map['This week']!.add(i);
+      } else if (day.isBefore(endOfNextWeek)) {
+        map['Next week']!.add(i);
+      } else {
+        map['Later']!.add(i);
+      }
     }
     return map;
   }
@@ -265,6 +318,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (_selectedBoard != null) _buildTabs(),
             if (_selectedBoard != null && _selectedBoard!.type.toLowerCase() != 'kanban' && _activeSprint != null && _activeTab == 0)
               _buildSprintCard(),
+            if (_selectedBoard != null) _buildAssigneeFilter(),
             if (_selectedBoard != null) _buildIssueSearch(),
             Expanded(
               child: _buildContent(),
@@ -340,13 +394,58 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.white,
       child: Row(
         children: [
-          Expanded(
-            child: _tab(0, 'Board', Icons.dashboard),
+          Expanded(child: _tab(0, 'Board', Icons.dashboard)),
+          Expanded(child: _tab(1, 'Backlog', Icons.inventory_2)),
+          Expanded(child: _tab(2, 'Timeline', Icons.timeline)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssigneeFilter() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Text(
+            'Assignee:',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
           ),
+          const SizedBox(width: 10),
           Expanded(
-            child: _tab(1, 'Backlog', Icons.inventory_2),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _assigneeChip('All', 'all'),
+                  _assigneeChip('Unassigned', 'unassigned'),
+                  ..._assignees.map((a) => _assigneeChip(a.name, a.key)),
+                ],
+              ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _assigneeChip(String label, String value) {
+    final selected = _selectedAssignee == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: FilterChip(
+        label: Text(label, style: TextStyle(fontSize: 13, color: selected ? Colors.white : null)),
+        selected: selected,
+        onSelected: (sel) async {
+          if (!sel) return;
+          setState(() => _selectedAssignee = value);
+          if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id);
+        },
+        selectedColor: const Color(0xFF0052CC),
+        checkmarkColor: Colors.white,
       ),
     );
   }
@@ -520,6 +619,58 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    if (_activeTab == 2 && _groupedByDueDate.entries.any((e) => e.value.isNotEmpty)) {
+      final timelineColors = <String, Color>{
+        'Overdue': const Color(0xFFDE350B),
+        'Today': const Color(0xFF00875A),
+        'This week': const Color(0xFF0052CC),
+        'Next week': const Color(0xFF6554C0),
+        'Later': const Color(0xFF5E6C84),
+        'No due date': const Color(0xFF97A0AF),
+      };
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        color: const Color(0xFF0052CC),
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          itemCount: _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).length,
+          itemBuilder: (context, idx) {
+            final entry = _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).elementAt(idx);
+            final color = timelineColors[entry.key] ?? const Color(0xFF5E6C84);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.event, size: 18, color: color),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${entry.key} (${entry.value.length})',
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...entry.value.map((issue) => IssueCard(
+                      issue: issue,
+                      onTap: () => _openIssue(issue.key),
+                    )),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: _refresh,
       color: const Color(0xFF0052CC),
@@ -549,12 +700,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBoardDropdown() {
-    return Expanded(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: TextField(
+    // Do not wrap in Expanded: caller already uses Expanded(child: _buildContent())
+    return Column(
+      mainAxisSize: MainAxisSize.max,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: TextField(
               onChanged: (v) async {
                 setState(() => _boardSearch = v);
                 await _loadBoards(reset: true);
@@ -586,6 +738,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               },
                               child: const Text('Load more'),
                             ),
+                    ),
                   );
                 }
                 final b = _boards[i];
@@ -612,11 +765,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     await _loadIssuesForBoard(b.id);
                   },
                 );
-              },
+                },
+              ),
             ),
-          ),
         ],
-      ),
     );
   }
 
@@ -634,4 +786,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-

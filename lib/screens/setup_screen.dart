@@ -64,13 +64,14 @@ class _SetupScreenState extends State<SetupScreen> {
 
     setState(() => _loading = true);
     try {
-      final config = JiraConfig(email: email, jiraUrl: jiraUrl, apiToken: apiToken);
+      final normalizedUrl = JiraApiService.normalizeJiraUrl(jiraUrl);
+      final config = JiraConfig(email: email, jiraUrl: normalizedUrl, apiToken: apiToken);
       final api = context.read<JiraApiService>();
       api.initialize(config);
 
-      final connected = await api.testConnection();
-      if (!connected) {
-        _showSnack('Unable to connect to Jira. Please check your credentials and try again.', isError: true);
+      final errorMessage = await api.testConnectionResult();
+      if (errorMessage != null) {
+        _showSnack(errorMessage, isError: true);
         setState(() => _loading = false);
         return;
       }
@@ -79,8 +80,11 @@ class _SetupScreenState extends State<SetupScreen> {
       _showSnack('Configuration saved successfully!');
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) widget.onComplete();
-    } catch (e) {
-      _showSnack('Failed to save configuration. Please try again.', isError: true);
+    } catch (e, stack) {
+      debugPrint('[SetupScreen] saveConfig error: $e');
+      debugPrint('[SetupScreen] $stack');
+      final msg = e.toString();
+      _showSnack('Failed to save: ${msg.length > 60 ? '${msg.substring(0, 60)}...' : msg}', isError: true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -240,6 +244,7 @@ class _SetupScreenState extends State<SetupScreen> {
           decoration: InputDecoration(
             labelText: 'Jira URL',
             hintText: 'https://your-domain.atlassian.net',
+            helperText: 'Jira Cloud only. Open this URL in Safari/Chrome to confirm it loads.',
             prefixIcon: const Icon(Icons.link),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,

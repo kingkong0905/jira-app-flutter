@@ -99,12 +99,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _saving = true);
     try {
-      final config = JiraConfig(email: email, jiraUrl: jiraUrl, apiToken: apiToken);
+      final normalizedUrl = JiraApiService.normalizeJiraUrl(jiraUrl);
+      final config = JiraConfig(email: email, jiraUrl: normalizedUrl, apiToken: apiToken);
       final api = context.read<JiraApiService>();
       api.initialize(config);
-      final connected = await api.testConnection();
-      if (!connected) {
-        _showSnack('Unable to connect to Jira. Please check your credentials.', isError: true);
+      final errorMessage = await api.testConnectionResult();
+      if (errorMessage != null) {
+        _showSnack(errorMessage, isError: true);
         setState(() => _saving = false);
         return;
       }
