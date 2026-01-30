@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import '../utils/adf_quill_converter.dart';
+import '../widgets/attachment_upload_widget.dart';
 
 /// Create Issue screen: allows user to create a new issue for the selected board.
 /// Similar to React Native CreateIssueScreen.tsx
@@ -52,6 +53,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
   bool _loading = true;
   bool _creating = false;
   bool _loadingParents = false;
+  List<AttachmentItem> _attachments = [];
 
   @override
   void initState() {
@@ -259,7 +261,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     setState(() => _creating = true);
 
     final api = context.read<JiraApiService>();
-    final error = await api.createIssue(
+    
+    // Create issue first
+    final result = await api.createIssue(
       projectKey: widget.projectKey!,
       issueTypeId: _selectedIssueTypeId!,
       summary: _summaryController.text.trim(),
@@ -272,14 +276,151 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       parentKey: _selectedParentKey,
     );
 
+    if (result == null || result.startsWith('ERROR:')) {
+      setState(() => _creating = false);
+      _showSnack(result?.substring(6) ?? 'Failed to create issue', isError: true);
+      return;
+    }
+
+    // Upload attachments if we have them and insert into description
+    final createdIssueKey = result;
+    if (_attachments.isNotEmpty) {
+      try {
+        for (final attachment in _attachments) {
+          if (!attachment.isUploaded && attachment.hasFile) {
+            Map<String, String>? uploadResult;
+            if (attachment.filePath != null) {
+              uploadResult = await api.uploadAttachment(
+                createdIssueKey,
+                attachment.filePath!,
+                attachment.filename,
+              );
+            } else if (attachment.fileBytes != null) {
+              uploadResult = await api.uploadAttachmentFromBytes(
+                createdIssueKey,
+                attachment.fileBytes!,
+                attachment.filename,
+              );
+            }
+            
+            // If upload successful, insert attachment marker into editor
+            if (uploadResult != null && uploadResult['id'] != null) {
+              final attachmentId = uploadResult['id']!;
+              final filename = uploadResult['filename'] ?? attachment.filename;
+              final mimeType = uploadResult['mimeType'] ?? '';
+              final isImage = mimeType.startsWith('image/') || attachment.isImage;
+              
+              // Insert attachment marker into Quill editor
+              final marker = isImage 
+                  ? '[image:$attachmentId:$filename]'
+                  : '[attachment:$attachmentId:$filename]';
+              
+              final index = _descriptionController.selection.baseOffset;
+              final currentDelta = _descriptionController.document.toDelta();
+              final currentOps = currentDelta.toJson() as List<dynamic>;
+              final newOps = <dynamic>[];
+              int currentPos = 0;
+              bool inserted = false;
+              
+              for (final op in currentOps) {
+                if (op is Map && !inserted) {
+                  final insert = op['insert'];
+                  final retain = op['retain'] as int?;
+                  if (retain != null) {
+                    if (currentPos + retain <= index) {
+                      newOps.add(op);
+                      currentPos += retain;
+                    } else if (currentPos < index) {
+                      final before = index - currentPos;
+                      final after = retain - before;
+                      if (before > 0) newOps.add({'retain': before});
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                      if (after > 0) newOps.add({'retain': after});
+                      currentPos += retain;
+                    } else {
+                      if (!inserted) {
+                        newOps.add({'insert': marker});
+                        inserted = true;
+                      }
+                      newOps.add(op);
+                      currentPos += retain;
+                    }
+                  } else if (insert != null) {
+                    final text = insert.toString();
+                    final textLength = text.length;
+                    if (currentPos + textLength <= index) {
+                      newOps.add(op);
+                      currentPos += textLength;
+                    } else if (currentPos < index) {
+                      final splitPos = index - currentPos;
+                      final before = text.substring(0, splitPos);
+                      final after = text.substring(splitPos);
+                      if (before.isNotEmpty) newOps.add({'insert': before});
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                      if (after.isNotEmpty) {
+                        final afterOp = Map<String, dynamic>.from(op);
+                        afterOp['insert'] = after;
+                        newOps.add(afterOp);
+                      }
+                      currentPos += textLength;
+                    } else {
+                      if (!inserted) {
+                        newOps.add({'insert': marker});
+                        inserted = true;
+                      }
+                      newOps.add(op);
+                      currentPos += textLength;
+                    }
+                  } else {
+                    newOps.add(op);
+                  }
+                } else {
+                  newOps.add(op);
+                }
+              }
+              if (!inserted) {
+                if (currentPos < index) newOps.add({'retain': index - currentPos});
+                newOps.add({'insert': marker});
+              }
+              _descriptionController.document = quill.Document.fromJson(newOps);
+              _descriptionController.updateSelection(
+                TextSelection.collapsed(offset: index + marker.length),
+                quill.ChangeSource.local,
+              );
+              
+              // Update attachment with upload info
+              final updatedAttachment = AttachmentItem(
+                filePath: attachment.filePath,
+                filename: filename,
+                size: attachment.size,
+                fileBytes: attachment.fileBytes,
+                attachmentId: attachmentId,
+                contentUrl: uploadResult['content'],
+                mimeType: mimeType,
+              );
+              
+              // Replace old attachment with updated one
+              setState(() {
+                final idx = _attachments.indexOf(attachment);
+                if (idx >= 0) {
+                  _attachments[idx] = updatedAttachment;
+                }
+              });
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed to upload attachments: $e');
+        // Continue even if attachment upload fails
+      }
+    }
+
     setState(() => _creating = false);
 
-    if (error == null) {
-      _showSnack('Issue created successfully');
-      widget.onIssueCreated();
-    } else {
-      _showSnack(error, isError: true);
-    }
+    _showSnack('Issue created successfully');
+    widget.onIssueCreated();
   }
 
   Map<String, dynamic>? _getDescriptionAdf() {
@@ -455,7 +596,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                         Container(
                           height: 200,
                           decoration: const BoxDecoration(
-                            color: Colors.white,
+                            color: AppTheme.white,
                             borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
                           ),
                           child: quill.QuillEditor.basic(
@@ -470,6 +611,23 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                         ),
                       ],
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Attachment upload widget
+                  AttachmentUploadWidget(
+                    issueKey: null, // Will be set after issue creation
+                    attachments: _attachments,
+                    editorController: _descriptionController,
+                    onAttachmentAdded: (attachment) {
+                      setState(() {
+                        _attachments.add(attachment);
+                      });
+                    },
+                    onAttachmentRemoved: (attachment) {
+                      setState(() {
+                        _attachments.remove(attachment);
+                      });
+                    },
                   ),
                   const SizedBox(height: 24),
 
@@ -524,7 +682,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                         onPressed: _creating ? null : _handleCreate,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppTheme.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           elevation: 0,
                         ),
@@ -532,9 +690,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                             ? const SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                child: CircularProgressIndicator(color: AppTheme.white, strokeWidth: 2),
                               )
-                            : Text(AppLocalizations.of(context).createIssue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                            : Text(AppLocalizations.of(context).createIssue, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   ),
@@ -576,7 +734,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.border),
         ),
@@ -609,7 +767,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.white,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: AppTheme.border),
         ),
@@ -626,7 +784,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   child: selectedUser.avatar48 == null
                       ? Text(
                           selectedUser.displayName.isNotEmpty ? selectedUser.displayName[0].toUpperCase() : '?',
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: AppTheme.white, fontSize: AppTheme.fontSizeSm, fontWeight: FontWeight.bold),
                         )
                       : null,
                 ),
@@ -642,7 +800,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
-                    child: Icon(Icons.person_off, color: Colors.white, size: 16),
+                    child: Icon(Icons.person_off, color: AppTheme.white, size: AppTheme.iconSizeXs),
                   ),
                 ),
               ),
@@ -786,7 +944,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(title, style: TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w600)),
           const Divider(height: 24),
           ListView(
             shrinkWrap: true,

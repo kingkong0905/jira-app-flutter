@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/jira_models.dart';
@@ -216,6 +217,142 @@ class JiraApiService {
       if (r.statusCode == 200) return r.bodyBytes;
     } catch (_) {}
     return null;
+  }
+
+  /// Upload attachment to an issue. POST /rest/api/3/issue/{issueKey}/attachments
+  /// Returns the uploaded attachment info (id, filename, content URL) or null on error.
+  Future<Map<String, String>?> uploadAttachment(String issueKey, String filePath, String filename) async {
+    try {
+      final file = await http.MultipartFile.fromPath('file', filePath, filename: filename);
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/attachments'),
+      );
+      
+      // Set headers for multipart request (without Content-Type, let it be set automatically)
+      final auth = base64Encode(utf8.encode('${_config!.email}:${_config!.apiToken}'));
+      request.headers['Authorization'] = 'Basic $auth';
+      request.headers['X-Atlassian-Token'] = 'no-check'; // Required for Jira Cloud
+      request.headers['Accept'] = 'application/json';
+      
+      request.files.add(file);
+      
+      final streamedResponse = await request.send().timeout(_timeout);
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        // Clear cache for issue details
+        _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
+        try {
+          final json = jsonDecode(response.body) as List<dynamic>;
+          if (json.isNotEmpty && json[0] is Map) {
+            final attachment = json[0] as Map<String, dynamic>;
+            final id = stringFromJson(attachment['id']);
+            
+            // Debug: log attachment response to see available fields
+            if (debugLog) {
+              _log('Attachment upload response', jsonEncode(attachment));
+            }
+            
+            final contentUrl = stringFromJson(attachment['content']);
+            final mimeType = stringFromJson(attachment['mimeType']) ?? 'application/octet-stream';
+            if (id != null) {
+              // Jira returns numeric IDs, but ADF media nodes require UUID format
+              // Generate a deterministic UUID v5 from the attachment ID
+              // This creates a consistent UUID that can be used in ADF media nodes
+              final mediaId = _generateUuidV5('6ba7b810-9dad-11d1-80b4-00c04fd430c8', id);
+              
+              if (debugLog) {
+                _log('Generated UUID for attachment', 'ID: $id -> UUID: $mediaId');
+              }
+              
+              return {
+                'id': id, // Numeric ID for reference
+                'mediaId': mediaId, // UUID format for ADF media nodes
+                'filename': filename,
+                'content': contentUrl ?? '',
+                'mimeType': mimeType,
+              };
+            }
+          }
+        } catch (_) {}
+        return null;
+      }
+      
+      _log('uploadAttachment failed', 'statusCode=${response.statusCode} body=${response.body}');
+      return null;
+    } catch (e) {
+      _log('uploadAttachment exception', e.toString());
+      return null;
+    }
+  }
+
+  /// Upload attachment from bytes (for web platform). POST /rest/api/3/issue/{issueKey}/attachments
+  /// Returns the uploaded attachment info (id, filename, content URL) or null on error.
+  Future<Map<String, String>?> uploadAttachmentFromBytes(String issueKey, List<int> bytes, String filename) async {
+    try {
+      final file = http.MultipartFile.fromBytes('file', bytes, filename: filename);
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/attachments'),
+      );
+      
+      // Set headers for multipart request (without Content-Type, let it be set automatically)
+      final auth = base64Encode(utf8.encode('${_config!.email}:${_config!.apiToken}'));
+      request.headers['Authorization'] = 'Basic $auth';
+      request.headers['X-Atlassian-Token'] = 'no-check'; // Required for Jira Cloud
+      request.headers['Accept'] = 'application/json';
+      
+      request.files.add(file);
+      
+      final streamedResponse = await request.send().timeout(_timeout);
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        // Clear cache for issue details
+        _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
+        try {
+          final json = jsonDecode(response.body) as List<dynamic>;
+          if (json.isNotEmpty && json[0] is Map) {
+            final attachment = json[0] as Map<String, dynamic>;
+            final id = stringFromJson(attachment['id']);
+            
+            // Debug: log attachment response to see available fields
+            if (debugLog) {
+              _log('Attachment upload response', jsonEncode(attachment));
+            }
+            
+            final contentUrl = stringFromJson(attachment['content']);
+            final mimeType = stringFromJson(attachment['mimeType']) ?? 'application/octet-stream';
+            if (id != null) {
+              // Jira returns numeric IDs, but ADF media nodes require UUID format
+              // Generate a deterministic UUID v5 from the attachment ID
+              // This creates a consistent UUID that can be used in ADF media nodes
+              final mediaId = _generateUuidV5('6ba7b810-9dad-11d1-80b4-00c04fd430c8', id);
+              
+              if (debugLog) {
+                _log('Generated UUID for attachment', 'ID: $id -> UUID: $mediaId');
+              }
+              
+              return {
+                'id': id, // Numeric ID for reference
+                'mediaId': mediaId, // UUID format for ADF media nodes
+                'filename': filename,
+                'content': contentUrl ?? '',
+                'mimeType': mimeType,
+              };
+            }
+          }
+        } catch (_) {}
+        return null;
+      }
+      
+      _log('uploadAttachmentFromBytes failed', 'statusCode=${response.statusCode} body=${response.body}');
+      return null;
+    } catch (e) {
+      _log('uploadAttachmentFromBytes exception', e.toString());
+      return null;
+    }
   }
 
   Future<bool> testConnection() async {
@@ -863,7 +1000,36 @@ class JiraApiService {
     return buffer.toString();
   }
 
-  /// Build ADF body from comment text. Parses mention markers into ADF mention nodes (id + display text).
+  /// Generate UUID v5 (deterministic) from namespace and name
+  /// This creates a consistent UUID from the attachment ID
+  static String _generateUuidV5(String namespaceUuid, String name) {
+    // Parse namespace UUID (remove dashes)
+    final nsBytes = namespaceUuid.replaceAll('-', '').toLowerCase();
+    final ns = List<int>.generate(16, (i) => int.parse(nsBytes.substring(i * 2, i * 2 + 2), radix: 16));
+    
+    // Combine namespace bytes with name bytes
+    final nameBytes = utf8.encode(name);
+    final combined = List<int>.from(ns)..addAll(nameBytes);
+    
+    // SHA-1 hash
+    final hash = sha1.convert(combined).bytes;
+    
+    // Set version (5) and variant bits
+    final result = List<int>.from(hash);
+    result[6] = (result[6] & 0x0f) | 0x50; // Version 5
+    result[8] = (result[8] & 0x3f) | 0x80; // Variant 10
+    
+    // Format as UUID string
+    return '${_hex(result, 0, 4)}-${_hex(result, 4, 6)}-${_hex(result, 6, 8)}-${_hex(result, 8, 10)}-${_hex(result, 10, 16)}';
+  }
+  
+  static String _hex(List<int> bytes, int start, int end) {
+    return bytes.sublist(start, end).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+  
+  /// Build ADF body from comment text. Parses mention markers and attachment markers into ADF nodes.
+  /// Attachment markers like [attachment:ID:filename] are converted to mediaInline nodes.
+  /// Mention markers are converted to mention nodes.
   static Map<String, dynamic> _commentBodyAdf(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) {
@@ -872,49 +1038,184 @@ class JiraApiService {
           'type': 'doc',
           'version': 1,
           'content': [
-            {'type': 'paragraph', 'content': []},
+            {'type': 'paragraph', 'content': [{'type': 'text', 'text': ''}]},
           ],
         },
       };
     }
     final normalized = _removeDuplicateMentionDisplay(trimmed);
-    final pattern = RegExp(
+    
+    // Pattern for attachment markers: [attachment:ID:filename] or [image:ID:filename]
+    final attachmentPattern = RegExp(r'\[(attachment|image):([^:]+):([^\]]+)\]');
+    
+    // Pattern for mention markers
+    final mentionPattern = RegExp(
       '${RegExp.escape(_mentionMarkerZwsp)}~$_mentionMarkerZwsp([^$_mentionMarkerSep]+)$_mentionMarkerSep([^$_mentionMarkerZwsp]*)$_mentionMarkerZwsp~$_mentionMarkerZwsp',
     );
+    
     final List<Map<String, dynamic>> paragraphContent = [];
+    
+    // Combine and sort all matches by position
+    final allMatches = <Map<String, dynamic>>[];
+    for (final match in attachmentPattern.allMatches(normalized)) {
+      allMatches.add({
+        'start': match.start,
+        'end': match.end,
+        'type': 'attachment',
+        'match': match,
+      });
+    }
+    for (final match in mentionPattern.allMatches(normalized)) {
+      allMatches.add({
+        'start': match.start,
+        'end': match.end,
+        'type': 'mention',
+        'match': match,
+      });
+    }
+    allMatches.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
+    
     int lastEnd = 0;
-    for (final match in pattern.allMatches(normalized)) {
-      if (match.start > lastEnd) {
-        final segment = normalized.substring(lastEnd, match.start);
+    for (final matchInfo in allMatches) {
+      final start = matchInfo['start'] as int;
+      final end = matchInfo['end'] as int;
+      final type = matchInfo['type'] as String;
+      
+      if (start > lastEnd) {
+        final segment = normalized.substring(lastEnd, start);
         if (segment.isNotEmpty) {
           paragraphContent.add({'type': 'text', 'text': segment});
         }
       }
-      final accountId = match.group(1) ?? '';
-      final displayName = match.group(2) ?? '';
-      paragraphContent.add({
-        'type': 'mention',
-        'attrs': {'id': accountId, 'text': displayName.isEmpty ? '@$accountId' : '@$displayName'},
-      });
-      lastEnd = match.end;
+      
+      if (type == 'attachment') {
+        final match = matchInfo['match'] as RegExpMatch;
+        final attachmentIdStr = match.group(2) ?? '';
+        final filename = match.group(3) ?? '';
+        
+        // Convert attachment ID to integer (Jira ADF requires numeric IDs)
+        final attachmentIdNum = int.tryParse(attachmentIdStr);
+        if (attachmentIdNum == null) {
+          // If ID is not numeric, add as plain text to avoid breaking the comment
+          debugPrint('Warning: Invalid attachment ID format (not numeric): $attachmentIdStr');
+          paragraphContent.add({'type': 'text', 'text': normalized.substring(start, end)});
+        } else {
+          // Add mediaInline node for attachment
+          // Jira ADF format: Try both string and integer ID formats
+          // First try: Use integer ID (as per ADF spec)
+          // If that fails, we'll try string ID or mediaSingle structure
+          final attrs = <String, dynamic>{
+            'id': attachmentIdNum, // Try integer first
+            'type': 'file',
+            'collection': 'attachment',
+          };
+          // Only add alt if filename is not empty
+          if (filename.isNotEmpty && filename.trim().isNotEmpty) {
+            attrs['alt'] = filename.trim();
+          }
+          paragraphContent.add({
+            'type': 'mediaInline',
+            'attrs': attrs,
+          });
+        }
+      } else if (type == 'mention') {
+        final match = matchInfo['match'] as RegExpMatch;
+        final accountId = match.group(1) ?? '';
+        final displayName = match.group(2) ?? '';
+        paragraphContent.add({
+          'type': 'mention',
+          'attrs': {'id': accountId, 'text': displayName.isEmpty ? '@$accountId' : '@$displayName'},
+        });
+      }
+      
+      lastEnd = end;
     }
+    
     if (lastEnd < normalized.length) {
       final segment = normalized.substring(lastEnd);
       if (segment.isNotEmpty) {
         paragraphContent.add({'type': 'text', 'text': segment});
       }
     }
+    
+    // Ensure we have valid content
+    // If paragraphContent is empty but we have normalized text, add it
     if (paragraphContent.isEmpty) {
-      paragraphContent.add({'type': 'text', 'text': normalized});
+      final trimmedNormalized = normalized.trim();
+      if (trimmedNormalized.isEmpty) {
+        // Empty comment - add empty paragraph
+        paragraphContent.add({'type': 'text', 'text': ''});
+      } else {
+        // Add normalized text
+        paragraphContent.add({'type': 'text', 'text': normalized});
+      }
     }
+    
+    // Jira comments with attachments: Use media nodes directly in document content
+    // Structure: paragraph with text, then media node with UUID ID and empty collection
+    final hasMediaInline = paragraphContent.any((item) => item['type'] == 'mediaInline');
+    
+    List<Map<String, dynamic>> docContent;
+      if (hasMediaInline) {
+        // Separate text content and media nodes
+        final textContent = <Map<String, dynamic>>[];
+        final mediaNodes = <Map<String, dynamic>>[];
+        
+        for (final item in paragraphContent) {
+          if (item['type'] == 'mediaInline') {
+            final attrs = item['attrs'] as Map<String, dynamic>;
+            // The ID stored in attrs should be the UUID from uploadAttachment response
+            // We store it as 'mediaId' in the attachment marker: [attachment:UUID:filename]
+            final mediaId = attrs['id']?.toString() ?? '';
+            
+            // Create media node with UUID string ID and empty collection
+            // The mediaId should be a UUID format from Jira's attachment upload response
+            mediaNodes.add({
+              'type': 'media',
+              'attrs': {
+                'type': 'file',
+                'id': mediaId, // UUID format expected by Jira ADF
+                'collection': '', // Empty collection as per the example
+              },
+            });
+          } else {
+            textContent.add(item);
+          }
+        }
+      
+      // Build document content: paragraph with text, then media nodes
+      docContent = [];
+      if (textContent.isNotEmpty) {
+        docContent.add({'type': 'paragraph', 'content': textContent});
+      }
+      // Add media nodes directly to document content (not inside paragraph)
+      docContent.addAll(mediaNodes);
+      
+      // Ensure we have at least one paragraph
+      if (docContent.isEmpty) {
+        docContent.add({'type': 'paragraph', 'content': [{'type': 'text', 'text': ''}]});
+      }
+    } else {
+      // No mediaInline nodes, use standard paragraph structure
+      docContent = [
+        {'type': 'paragraph', 'content': paragraphContent},
+      ];
+    }
+    
+    // Build ADF document
+    final adfBody = {
+      'type': 'doc',
+      'version': 1,
+      'content': docContent,
+    };
+    
+    // Debug: log ADF structure for troubleshooting validation errors
+    if (debugLog) {
+      _log('Comment ADF structure', jsonEncode(adfBody));
+    }
+    
     return {
-      'body': {
-        'type': 'doc',
-        'version': 1,
-        'content': [
-          {'type': 'paragraph', 'content': paragraphContent},
-        ],
-      },
+      'body': adfBody,
     };
   }
 
@@ -935,14 +1236,28 @@ class JiraApiService {
     if (parentCommentId != null && parentCommentId.isNotEmpty) {
       payload['parent'] = {'id': parentCommentId};
     }
+    
+    // Debug: log payload for troubleshooting
+    if (debugLog) {
+      _log('Adding comment', 'Issue: $issueKey, Payload: ${jsonEncode(payload)}');
+    }
+    
     final r = await http.post(
       Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/comment'),
       headers: _headers,
       body: jsonEncode(payload),
     ).timeout(_timeout);
+    
     if (r.statusCode >= 200 && r.statusCode < 300) {
       _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
       return null;
+    }
+    
+    // Log detailed error for debugging validation issues
+    _log('addComment failed', 'statusCode=${r.statusCode}');
+    _log('Error response body', r.body);
+    if (debugLog) {
+      _log('Request payload was', jsonEncode(payload));
     }
     return r.body;
   }
@@ -1096,6 +1411,7 @@ class JiraApiService {
   }
 
   /// Create a new issue. POST /rest/api/3/issue
+  /// Returns the created issue key on success, or an error message string on failure.
   Future<String?> createIssue({
     required String projectKey,
     required String issueTypeId,
@@ -1159,7 +1475,7 @@ class JiraApiService {
         }
         
         clearCache();
-        return null;
+        return issueKey; // Return issue key on success
       }
 
       // Parse error message
@@ -1167,17 +1483,17 @@ class JiraApiService {
         final errorJson = jsonDecode(r.body) as Map<String, dynamic>;
         final errorMessages = errorJson['errorMessages'] as List<dynamic>?;
         if (errorMessages != null && errorMessages.isNotEmpty) {
-          return errorMessages.join(', ');
+          return 'ERROR: ${errorMessages.join(', ')}';
         }
         final errors = errorJson['errors'] as Map<String, dynamic>?;
         if (errors != null && errors.isNotEmpty) {
-          return errors.values.join(', ');
+          return 'ERROR: ${errors.values.join(', ')}';
         }
       } catch (_) {}
       
-      return 'Failed to create issue: ${r.statusCode}';
+      return 'ERROR: Failed to create issue: ${r.statusCode}';
     } catch (e) {
-      return e.toString();
+      return 'ERROR: ${e.toString()}';
     }
   }
 

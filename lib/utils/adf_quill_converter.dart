@@ -67,20 +67,56 @@ List<Map<String, dynamic>> adfToQuillOps(dynamic adf) {
       for (final media in nodeContent) {
         if (media is Map) {
           final attrs = media['attrs'];
-          final alt = attrs is Map ? (attrs['alt'] ?? attrs['id'] ?? '')?.toString() ?? '' : '';
-          final placeholder = alt.isEmpty ? '[Image]' : '[Image: $alt]';
-          ops.add({'insert': placeholder});
-          ops.add({'insert': '\n'});
+          if (attrs is Map) {
+            final id = attrs['id']?.toString() ?? '';
+            final alt = attrs['alt']?.toString() ?? '';
+            final filename = alt.isNotEmpty ? alt : (id.isNotEmpty ? 'attachment' : '');
+            final isImage = attrs['type']?.toString() == 'file' && 
+                (filename.toLowerCase().endsWith('.jpg') ||
+                 filename.toLowerCase().endsWith('.jpeg') ||
+                 filename.toLowerCase().endsWith('.png') ||
+                 filename.toLowerCase().endsWith('.gif') ||
+                 filename.toLowerCase().endsWith('.webp'));
+            
+            if (id.isNotEmpty) {
+              final marker = isImage 
+                  ? '[image:$id:$filename]'
+                  : '[attachment:$id:$filename]';
+              ops.add({'insert': marker});
+            } else {
+              final placeholder = alt.isNotEmpty ? '[Image: $alt]' : '[Image]';
+              ops.add({'insert': placeholder});
+            }
+            ops.add({'insert': '\n'});
+          }
         }
       }
     } else if (type == 'mediaGroup' && nodeContent is List) {
       for (final media in nodeContent) {
         if (media is Map) {
           final attrs = media['attrs'];
-          final alt = attrs is Map ? (attrs['alt'] ?? attrs['id'] ?? '')?.toString() ?? '' : '';
-          final placeholder = alt.isEmpty ? '[Image]' : '[Image: $alt]';
-          ops.add({'insert': placeholder});
-          ops.add({'insert': '\n'});
+          if (attrs is Map) {
+            final id = attrs['id']?.toString() ?? '';
+            final alt = attrs['alt']?.toString() ?? '';
+            final filename = alt.isNotEmpty ? alt : (id.isNotEmpty ? 'attachment' : '');
+            final isImage = attrs['type']?.toString() == 'file' && 
+                (filename.toLowerCase().endsWith('.jpg') ||
+                 filename.toLowerCase().endsWith('.jpeg') ||
+                 filename.toLowerCase().endsWith('.png') ||
+                 filename.toLowerCase().endsWith('.gif') ||
+                 filename.toLowerCase().endsWith('.webp'));
+            
+            if (id.isNotEmpty) {
+              final marker = isImage 
+                  ? '[image:$id:$filename]'
+                  : '[attachment:$id:$filename]';
+              ops.add({'insert': marker});
+            } else {
+              final placeholder = alt.isNotEmpty ? '[Image: $alt]' : '[Image]';
+              ops.add({'insert': placeholder});
+            }
+            ops.add({'insert': '\n'});
+          }
         }
       }
     }
@@ -131,6 +167,27 @@ void _emitInlineContent(dynamic content, List<Map<String, dynamic>> ops) {
       } else {
         ops.add({'insert': '[Link]'});
       }
+    } else if (type == 'mediaInline' || type == 'media') {
+      // Handle inline media (for comments)
+      final attrs = item['attrs'];
+      if (attrs is Map) {
+        final id = attrs['id']?.toString() ?? '';
+        final alt = attrs['alt']?.toString() ?? attrs['url']?.toString() ?? '';
+        final isImage = attrs['type']?.toString() == 'file' && 
+            (alt.toLowerCase().endsWith('.jpg') ||
+             alt.toLowerCase().endsWith('.jpeg') ||
+             alt.toLowerCase().endsWith('.png') ||
+             alt.toLowerCase().endsWith('.gif') ||
+             alt.toLowerCase().endsWith('.webp'));
+        if (id.isNotEmpty) {
+          final marker = isImage 
+              ? '[image:$id:$alt]'
+              : '[attachment:$id:$alt]';
+          ops.add({'insert': marker});
+        } else if (alt.isNotEmpty) {
+          ops.add({'insert': '[Attachment: $alt]'});
+        }
+      }
     } else if (type == 'hardBreak') {
       ops.add({'insert': '\n'});
     }
@@ -151,6 +208,8 @@ String _plainFromNode(dynamic node) {
 }
 
 /// Convert Quill Delta ops to ADF document.
+/// Handles attachment markers like [attachment:ID:filename] and [image:ID:filename],
+/// converting them to ADF mediaSingle nodes with media content.
 Map<String, dynamic> quillOpsToAdf(List<dynamic> opsList) {
   final content = <Map<String, dynamic>>[];
   if (opsList.isEmpty) {
@@ -203,6 +262,9 @@ Map<String, dynamic> quillOpsToAdf(List<dynamic> opsList) {
     bufferAttrs = null;
   }
 
+  // Pattern to match attachment markers: [attachment:ID:filename] or [image:ID:filename]
+  final attachmentPattern = RegExp(r'\[(attachment|image):([^:]+):([^\]]+)\]');
+  
   while (i < ops.length) {
     final op = ops[i];
     final insert = op['insert'];
@@ -228,8 +290,113 @@ Map<String, dynamic> quillOpsToAdf(List<dynamic> opsList) {
           flushParagraph();
         }
       } else {
-        buffer += s;
-        bufferAttrs = attrs;
+        // Check for attachment markers in the text
+        final matches = attachmentPattern.allMatches(s);
+        if (matches.isEmpty) {
+          buffer += s;
+          bufferAttrs = attrs;
+        } else {
+          // Split text by attachment markers and process each part
+          int lastEnd = 0;
+          for (final match in matches) {
+            // Add text before the marker
+            if (match.start > lastEnd) {
+              buffer += s.substring(lastEnd, match.start);
+              bufferAttrs = attrs;
+            }
+            
+            // Flush current paragraph before adding media
+            if (buffer.isNotEmpty || bufferAttrs != null) {
+              flushParagraph();
+            }
+            
+            // Extract attachment info from marker
+            final type = match.group(1) ?? 'attachment';
+            final attachmentIdStr = match.group(2) ?? '';
+            final filename = match.group(3) ?? '';
+            final isImage = type == 'image' || filename.toLowerCase().endsWith('.jpg') ||
+                filename.toLowerCase().endsWith('.jpeg') ||
+                filename.toLowerCase().endsWith('.png') ||
+                filename.toLowerCase().endsWith('.gif') ||
+                filename.toLowerCase().endsWith('.webp');
+            
+            // Convert attachment ID to integer if possible (Jira expects numeric IDs)
+            final attachmentIdNum = int.tryParse(attachmentIdStr);
+            final attachmentId = attachmentIdNum ?? attachmentIdStr;
+            
+            // Create ADF media node
+            // Use string representation of ID for consistency
+            final mediaNode = {
+              'type': 'media',
+              'attrs': {
+                'id': attachmentIdNum?.toString() ?? attachmentIdStr,
+                'type': 'file',
+                'collection': 'attachment',
+                'width': isImage ? 300 : null,
+                'height': isImage ? 200 : null,
+                'alt': filename,
+              },
+            };
+            
+            // Wrap in mediaSingle for single images, or add to mediaGroup
+            if (isImage) {
+              content.add({
+                'type': 'mediaSingle',
+                'attrs': {'layout': 'center'},
+                'content': [mediaNode],
+              });
+            } else {
+              // For non-images, add as mediaSingle with file icon representation
+              content.add({
+                'type': 'mediaSingle',
+                'attrs': {'layout': 'center'},
+                'content': [mediaNode],
+              });
+            }
+            
+            lastEnd = match.end;
+          }
+          
+          // Add remaining text after last marker
+          if (lastEnd < s.length) {
+            buffer += s.substring(lastEnd);
+            bufferAttrs = attrs;
+          }
+        }
+      }
+    } else if (insert is Map) {
+      // Handle Quill image embeds if present
+      final imageUrl = insert['image']?.toString();
+      if (imageUrl != null) {
+        // Flush current paragraph before adding media
+        if (buffer.isNotEmpty || bufferAttrs != null) {
+          flushParagraph();
+        }
+        
+        // Extract attachment ID from URL if it's a Jira attachment URL
+        final attachmentIdMatch = RegExp(r'/attachment/(\d+)/').firstMatch(imageUrl);
+        final attachmentIdStr = attachmentIdMatch?.group(1) ?? '';
+        
+        if (attachmentIdStr.isNotEmpty) {
+          // Convert to integer then back to string (Jira expects numeric string IDs)
+          final attachmentIdNum = int.tryParse(attachmentIdStr);
+          content.add({
+            'type': 'mediaSingle',
+            'attrs': {'layout': 'center'},
+            'content': [
+              {
+                'type': 'media',
+                'attrs': {
+                  'id': attachmentIdNum?.toString() ?? attachmentIdStr,
+                  'type': 'file',
+                  'collection': 'attachment',
+                  'width': 300,
+                  'height': 200,
+                },
+              },
+            ],
+          });
+        }
       }
     }
     i++;

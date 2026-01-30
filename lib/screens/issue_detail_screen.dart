@@ -15,6 +15,8 @@ import '../models/jira_models.dart';
 import '../services/jira_api_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/adf_quill_converter.dart';
+import '../widgets/attachment_upload_widget.dart';
+import '../theme/app_theme.dart';
 
 /// Issue detail: structure and logic aligned with reference (kingkong0905/jira-app IssueDetailsScreen).
 class IssueDetailScreen extends StatefulWidget {
@@ -47,6 +49,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   bool _loadingParent = false;
   String? _error;
   final TextEditingController _newCommentController = TextEditingController();
+  late quill.QuillController _newCommentQuillController;
+  final ScrollController _newCommentScrollController = ScrollController();
+  final FocusNode _newCommentFocusNode = FocusNode();
+  List<AttachmentItem> _newCommentAttachments = [];
   bool _addingComment = false;
   String? _replyToCommentId;
   JiraAttachment? _previewAttachment;
@@ -111,6 +117,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize Quill controller for comments
+    final doc = quill.Document.fromJson([{'insert': '\n'}]);
+    _newCommentQuillController = quill.QuillController(
+      document: doc,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
     _load();
     // Listen to comment text changes for mention detection
     _newCommentController.addListener(_onCommentTextChanged);
@@ -124,6 +136,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     _previewVideoController = null;
     _newCommentController.removeListener(_onCommentTextChanged);
     _newCommentController.dispose();
+    _newCommentQuillController.dispose();
+    _newCommentScrollController.dispose();
+    _newCommentFocusNode.dispose();
     _storyPointsController?.dispose();
     _assigneeSearchController.dispose();
     _assigneeSearchTimer?.cancel();
@@ -181,11 +196,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           child: Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(8),
-            color: Colors.white,
+            color: AppTheme.white,
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFDFE1E6)),
+                border: Border.all(color: AppTheme.dividerColor),
               ),
               clipBehavior: Clip.antiAlias,
               child: ListView.separated(
@@ -221,15 +236,15 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                 Text(
                                   user.displayName,
                                   style: const TextStyle(
-                                    fontSize: 14,
+                                    fontSize: AppTheme.fontSizeBase,
                                     fontWeight: FontWeight.w500,
-                                    color: Color(0xFF172B4D),
+                                    color: AppTheme.overlayDark,
                                   ),
                                 ),
                                 if (user.emailAddress != null && user.emailAddress!.isNotEmpty)
                                   Text(
                                     user.emailAddress!,
-                                    style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A)),
+                                    style: TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.overlayMuted),
                                   ),
                               ],
                             ),
@@ -252,15 +267,15 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: const Color(0xFF0052CC),
+        color: AppTheme.primary,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Center(
         child: Text(
           user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
           style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
+            color: AppTheme.white,
+            fontSize: AppTheme.fontSizeBase,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -429,14 +444,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   static Color _statusColor(String? key) {
     switch (key?.toLowerCase()) {
       case 'done':
-        return const Color(0xFF00875A);
+        return AppTheme.statusDone;
       case 'indeterminate':
-        return const Color(0xFF0052CC);
+        return AppTheme.primary;
       case 'new':
       case 'todo':
-        return const Color(0xFF6554C0);
+        return AppTheme.statusTodo;
       default:
-        return const Color(0xFF999999);
+        return AppTheme.statusDefault;
     }
   }
 
@@ -465,13 +480,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           icon: const Icon(Icons.arrow_back),
         ),
         title: Text(widget.issueKey, style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: const Color(0xFF0052CC),
-        foregroundColor: Colors.white,
+        backgroundColor: AppTheme.primary,
+        foregroundColor: AppTheme.white,
       ),
       body: Stack(
         children: [
           _loading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF0052CC)))
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primary))
               : _error != null
                   ? Center(
                       child: Padding(
@@ -479,9 +494,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.error_outline, size: 48, color: Color(0xFFDE350B)),
-                            const SizedBox(height: 16),
-                            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF5E6C84))),
+                            Icon(Icons.error_outline, size: AppTheme.iconSizeXxl, color: AppTheme.error),
+                            const SizedBox(height: AppTheme.spaceLg),
+                            Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.overlayLight)),
                             const SizedBox(height: 24),
                             FilledButton(
                               onPressed: _load,
@@ -504,7 +519,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           _buildDescriptionCard(),
                           if ((_issue!.fields.attachment ?? []).isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).attachments, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).attachments, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
                             _buildAttachmentsSection(),
                           ],
@@ -520,22 +535,22 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           _buildSubtasksSection(),
                           if (_issue!.fields.issuetype.name.toLowerCase().contains('epic')) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).issuesInThisEpic, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).issuesInThisEpic, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
                             _buildEpicChildrenSection(),
                           ],
                           if ((_issue!.fields.issuelinks ?? []).isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).linkedWorkItems, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).linkedWorkItems, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
                             _buildLinkedWorkItemsSection(),
                           ],
                           const SizedBox(height: 24),
-                          Text(AppLocalizations.of(context).confluence, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).confluence, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 8),
                           _buildConfluenceSection(),
                           const SizedBox(height: 24),
-                          Text(AppLocalizations.of(context).comments, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).comments, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 12),
                           if (_replyToCommentId != null) _buildReplyBanner(),
                           Stack(
@@ -545,15 +560,49 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                               LayoutBuilder(
                                 builder: (context, constraints) {
                                 final useStacked = constraints.maxWidth < 400;
-                                final inputField = TextField(
-                                  controller: _newCommentController,
-                                  decoration: InputDecoration(
-                                    hintText: AppLocalizations.of(context).addCommentHint,
-                                    border: const OutlineInputBorder(),
-                                    isDense: true,
+                                final inputField = Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: AppTheme.border),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                  maxLines: useStacked ? 3 : 4,
-                                  minLines: 1,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        height: useStacked ? 80 : 100,
+                                        child: quill.QuillEditor.basic(
+                                          controller: _newCommentQuillController,
+                                          config: quill.QuillEditorConfig(
+                                            placeholder: AppLocalizations.of(context).addCommentHint,
+                                            padding: const EdgeInsets.all(8),
+                                          ),
+                                          focusNode: _newCommentFocusNode,
+                                          scrollController: _newCommentScrollController,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: const BoxDecoration(
+                                          border: Border(top: BorderSide(color: AppTheme.dividerColor, width: 1)),
+                                        ),
+                                        child: AttachmentUploadWidget(
+                                          issueKey: widget.issueKey,
+                                          attachments: _newCommentAttachments,
+                                          editorController: _newCommentQuillController,
+                                          onAttachmentAdded: (attachment) {
+                                            setState(() {
+                                              _newCommentAttachments.add(attachment);
+                                            });
+                                          },
+                                          onAttachmentRemoved: (attachment) {
+                                            setState(() {
+                                              _newCommentAttachments.remove(attachment);
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 );
                                 final postButton = FilledButton(
                                   onPressed: _addingComment ? null : _onAddComment,
@@ -588,7 +637,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           if (_comments.isEmpty)
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
-                              child: Text(AppLocalizations.of(context).noCommentsYet, style: const TextStyle(color: Color(0xFF5E6C84), fontStyle: FontStyle.italic)),
+                              child: Text(AppLocalizations.of(context).noCommentsYet, style: TextStyle(color: AppTheme.overlayLight, fontStyle: FontStyle.italic)),
                             )
                           else
                             ..._commentTreeWidgets(),
@@ -620,7 +669,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       onTap: _closeUserInfoModal,
       behavior: HitTestBehavior.opaque,
       child: Material(
-        color: Colors.black54,
+        color: AppTheme.black54,
         child: Center(
           child: GestureDetector(
             onTap: () {}, // prevent tap from closing when tapping the card
@@ -628,9 +677,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               margin: const EdgeInsets.symmetric(horizontal: 24),
               constraints: const BoxConstraints(maxWidth: 360),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.white,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 16, offset: const Offset(0, 8))],
+                boxShadow: [BoxShadow(color: AppTheme.black26, blurRadius: 16, offset: const Offset(0, 8))],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -666,14 +715,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     const SizedBox(height: 16),
                     Text(
                       _selectedUser!.displayName,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Color(0xFF172B4D)),
+                      style: TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w600, color: AppTheme.overlayDark),
                       textAlign: TextAlign.center,
                     ),
                     if (_selectedUser!.emailAddress != null && _selectedUser!.emailAddress!.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
                         _selectedUser!.emailAddress!,
-                        style: const TextStyle(fontSize: 14, color: Color(0xFF5E6C84)),
+                        style: TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.overlayLight),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -712,12 +761,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               child: Center(
                 child: isImage
                     ? (_loadingPreview
-                        ? const CircularProgressIndicator(color: Colors.white)
+                        ? const CircularProgressIndicator(color: AppTheme.white)
                         : bytes != null
                             ? InteractiveViewer(
                                 child: Image.memory(bytes, fit: BoxFit.contain),
                               )
-                            : Text(AppLocalizations.of(context).failedToLoadImage, style: const TextStyle(color: Colors.white)))
+                            : Text(AppLocalizations.of(context).failedToLoadImage, style: TextStyle(color: AppTheme.white)))
                     : isVideo
                         ? (videoError != null
                             ? Padding(
@@ -725,11 +774,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(Icons.error_outline, color: Colors.white, size: 48),
-                                    const SizedBox(height: 16),
-                                    Text(AppLocalizations.of(context).videoFailedToLoad, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                                    const SizedBox(height: 8),
-                                    Text(videoError, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                                    Icon(Icons.error_outline, color: AppTheme.white, size: AppTheme.iconSizeXxl),
+                                    const SizedBox(height: AppTheme.spaceLg),
+                                    Text(AppLocalizations.of(context).videoFailedToLoad, style: TextStyle(color: AppTheme.white, fontSize: AppTheme.fontSizeLg)),
+                                    const SizedBox(height: AppTheme.spaceSm),
+                                    Text(videoError, style: TextStyle(color: AppTheme.white70, fontSize: AppTheme.fontSizeSm), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
                                     const SizedBox(height: 24),
                                     FilledButton.icon(
                                       onPressed: () async {
@@ -756,9 +805,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const CircularProgressIndicator(color: Colors.white),
-                                        const SizedBox(height: 16),
-                                        Text(AppLocalizations.of(context).loadingVideo, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                        const CircularProgressIndicator(color: AppTheme.white),
+                                        const SizedBox(height: AppTheme.spaceLg),
+                                        Text(AppLocalizations.of(context).loadingVideo, style: TextStyle(color: AppTheme.white, fontSize: AppTheme.fontSizeBase)),
                                       ],
                                     ),
                                   ))
@@ -767,9 +816,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(_fileIcon(att), style: const TextStyle(fontSize: 48)),
-                                const SizedBox(height: 16),
-                                Text(att.filename, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                Text(_fileIcon(att), style: TextStyle(fontSize: AppTheme.fontSizeHuge)),
+                                const SizedBox(height: AppTheme.spaceLg),
+                                Text(att.filename, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.white, fontSize: AppTheme.fontSizeLg), maxLines: 2, overflow: TextOverflow.ellipsis),
                                 const SizedBox(height: 24),
                                 FilledButton.icon(
                                   onPressed: () async {
@@ -817,8 +866,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               child: controller.value.isPlaying
                   ? const SizedBox.shrink()
                   : Container(
-                      color: Colors.black38,
-                      child: const Icon(Icons.play_arrow, color: Colors.white, size: 72),
+                      color: AppTheme.black38,
+                      child: Icon(Icons.play_arrow, color: AppTheme.white, size: AppTheme.iconSizeHuge),
                     ),
             ),
           ],
@@ -1078,6 +1127,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final adfResult = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute<Map<String, dynamic>>(
         builder: (ctx) => _DescriptionEditPage(
+          issueKey: widget.issueKey,
           initialDescription: initialDescription,
           attachments: attachments,
           loadedImageBytes: _loadedImageBytes,
@@ -1749,7 +1799,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       onTap: onClose,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: Colors.black54,
+        color: AppTheme.black54,
         alignment: Alignment.bottomCenter,
         child: GestureDetector(
           onTap: () {},
@@ -1757,7 +1807,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             width: double.infinity,
             constraints: const BoxConstraints(maxHeight: 400),
             decoration: const BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.white,
               borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Column(
@@ -1797,7 +1847,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: AppTheme.white,
             borderRadius: BorderRadius.circular(8),
             child: InkWell(
               onTap: () => _onAttachmentPress(a),
@@ -1806,7 +1856,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: AppTheme.dividerColor),
                 ),
                 child: Row(
                   children: [
@@ -1994,7 +2044,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: AppTheme.white,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: () => _navigateToIssue(issue.key),
@@ -2003,7 +2053,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: AppTheme.dividerColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2065,7 +2115,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: AppTheme.white,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: () => _navigateToIssue(issue.key),
@@ -2074,7 +2124,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: AppTheme.dividerColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2132,7 +2182,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: AppTheme.white,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: () => _navigateToIssue(issue.key),
@@ -2141,7 +2191,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: AppTheme.dividerColor),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2221,7 +2271,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Material(
-                color: Colors.white,
+                color: AppTheme.white,
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
                   onTap: link.url.isNotEmpty && !isDeleting
@@ -2232,7 +2282,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFDFE1E6)),
+                      border: Border.all(color: AppTheme.dividerColor),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2535,23 +2585,190 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
 
   Future<void> _onAddComment() async {
-    final text = _newCommentController.text.trim();
-    if (text.isEmpty) return;
+    final plainText = _newCommentQuillController.document.toPlainText().trim();
+    if (plainText.isEmpty && _newCommentAttachments.isEmpty) return;
+    
     final api = context.read<JiraApiService>();
     final parentId = _replyToCommentId;
     setState(() => _addingComment = true);
+    
     try {
-      final err = await api.addComment(widget.issueKey, text, parentCommentId: parentId);
+      // Upload attachments first and insert into comment text
+      final List<String> uploadedAttachmentIds = [];
+      if (_newCommentAttachments.isNotEmpty) {
+        for (final attachment in _newCommentAttachments) {
+          if (!attachment.isUploaded && attachment.hasFile) {
+            Map<String, String>? uploadResult;
+            try {
+              if (attachment.filePath != null) {
+                uploadResult = await api.uploadAttachment(
+                  widget.issueKey,
+                  attachment.filePath!,
+                  attachment.filename,
+                );
+              } else if (attachment.fileBytes != null) {
+                uploadResult = await api.uploadAttachmentFromBytes(
+                  widget.issueKey,
+                  attachment.fileBytes!,
+                  attachment.filename,
+                );
+              }
+            } catch (e) {
+              debugPrint('Failed to upload attachment ${attachment.filename}: $e');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to upload ${attachment.filename}: $e')),
+                );
+              }
+              continue; // Skip this attachment if upload failed
+            }
+            
+            // If upload successful, insert attachment marker into editor
+            if (uploadResult != null && uploadResult['id'] != null && uploadResult['id']!.isNotEmpty) {
+              final attachmentId = uploadResult['id']!; // Numeric ID for reference
+              final mediaId = uploadResult['mediaId'] ?? uploadResult['id']!; // UUID for ADF (fallback to numeric ID)
+              final filename = uploadResult['filename'] ?? attachment.filename;
+              final mimeType = uploadResult['mimeType'] ?? '';
+              final isImage = mimeType.startsWith('image/') || attachment.isImage;
+              
+              uploadedAttachmentIds.add(attachmentId);
+              
+              // Use UUID (mediaId) for the attachment marker in the editor
+              // This will be used in ADF media nodes
+              final markerId = mediaId;
+              
+              // Create marker for ADF
+              final marker = isImage 
+                  ? '[image:$markerId:$filename]'
+                  : '[attachment:$markerId:$filename]';
+              
+              // Insert into editor at cursor position
+              final index = _newCommentQuillController.selection.baseOffset;
+              final currentDelta = _newCommentQuillController.document.toDelta();
+              final currentOps = currentDelta.toJson() as List<dynamic>;
+              
+              // Build new ops with marker inserted at index
+              final newOps = <dynamic>[];
+              int currentPos = 0;
+              bool inserted = false;
+              
+              for (final op in currentOps) {
+                if (op is Map && !inserted) {
+                  final insert = op['insert'];
+                  final retain = op['retain'] as int?;
+                  
+                  if (retain != null) {
+                    if (currentPos + retain <= index) {
+                      newOps.add(op);
+                      currentPos += retain;
+                    } else if (currentPos < index) {
+                      final before = index - currentPos;
+                      final after = retain - before;
+                      if (before > 0) newOps.add({'retain': before});
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                      if (after > 0) newOps.add({'retain': after});
+                      currentPos += retain;
+                    } else {
+                      if (!inserted) {
+                        newOps.add({'insert': marker});
+                        inserted = true;
+                      }
+                      newOps.add(op);
+                      currentPos += retain;
+                    }
+                  } else if (insert != null) {
+                    final text = insert.toString();
+                    final textLength = text.length;
+                    
+                    if (currentPos + textLength <= index) {
+                      newOps.add(op);
+                      currentPos += textLength;
+                    } else if (currentPos < index) {
+                      final splitPos = index - currentPos;
+                      final before = text.substring(0, splitPos);
+                      final after = text.substring(splitPos);
+                      if (before.isNotEmpty) newOps.add({'insert': before});
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                      if (after.isNotEmpty) {
+                        final afterOp = Map<String, dynamic>.from(op);
+                        afterOp['insert'] = after;
+                        newOps.add(afterOp);
+                      }
+                      currentPos += textLength;
+                    } else {
+                      if (!inserted) {
+                        newOps.add({'insert': marker});
+                        inserted = true;
+                      }
+                      newOps.add(op);
+                      currentPos += textLength;
+                    }
+                  } else {
+                    newOps.add(op);
+                  }
+                } else {
+                  newOps.add(op);
+                }
+              }
+              
+              if (!inserted) {
+                if (currentPos < index) {
+                  newOps.add({'retain': index - currentPos});
+                }
+                newOps.add({'insert': marker});
+              }
+              
+              final newDoc = quill.Document.fromJson(newOps);
+              _newCommentQuillController.document = newDoc;
+              _newCommentQuillController.updateSelection(
+                TextSelection.collapsed(offset: index + marker.length),
+                quill.ChangeSource.local,
+              );
+            }
+          }
+        }
+      }
+      
+      // Build comment text from Quill editor (with attachment markers already inserted)
+      final delta = _newCommentQuillController.document.toDelta();
+      final ops = delta.toJson();
+      // Extract text including attachment markers, then convert to ADF
+      final commentText = _buildCommentTextFromQuill(ops);
+      
+      // Validate: ensure we have text or uploaded attachments
+      final hasText = commentText.trim().isNotEmpty;
+      final hasAttachments = uploadedAttachmentIds.isNotEmpty;
+      if (!hasText && !hasAttachments) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Comment cannot be empty')),
+          );
+        }
+        return;
+      }
+      
+      // Add comment - _commentBodyAdf will convert attachment markers to ADF mediaInline nodes
+      String? err = await api.addComment(widget.issueKey, commentText, parentCommentId: parentId);
+      
       if (mounted) {
         if (err != null) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to add comment: $err')));
         } else {
+          // Clear comment editor
+          final doc = quill.Document.fromJson([{'insert': '\n'}]);
+          _newCommentQuillController = quill.QuillController(
+            document: doc,
+            selection: const TextSelection.collapsed(offset: 0),
+          );
           _newCommentController.clear();
           _removeMentionOverlay();
           setState(() {
             _replyToCommentId = null;
             _showMentionSuggestions = false;
             _mentionStartPosition = -1;
+            _newCommentAttachments = [];
           });
           await _load();
         }
@@ -2559,6 +2776,33 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     } finally {
       if (mounted) setState(() => _addingComment = false);
     }
+  }
+  
+  /// Build comment text from Quill operations (converts to plain text with mention markers and attachment markers)
+  /// Attachment markers like [attachment:ID:filename] are preserved as text and will be converted to ADF mediaInline nodes by _commentBodyAdf
+  String _buildCommentTextFromQuill(List<dynamic> ops) {
+    final buffer = StringBuffer();
+    for (final op in ops) {
+      if (op is Map) {
+        final insert = op['insert'];
+        if (insert is String) {
+          // Write all text including attachment markers like [attachment:ID:filename] or [image:ID:filename]
+          buffer.write(insert);
+        } else if (insert is Map) {
+          // Handle mentions or other embedded content
+          final mention = insert['mention'];
+          if (mention is Map) {
+            final accountId = mention['id']?.toString() ?? '';
+            final displayName = mention['displayName']?.toString() ?? '';
+            // Use mention marker format expected by API (same as JiraApiService)
+            const zwsp = '\u200B';
+            const sep = '\u200C';
+            buffer.write('$zwsp~$zwsp$accountId$sep$displayName$zwsp~$zwsp');
+          }
+        }
+      }
+    }
+    return buffer.toString();
   }
 
   /// Parent id from Jira comment (for threaded replies).
@@ -2722,30 +2966,26 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final commentId = map['id']?.toString();
     if (commentId == null) return;
     final body = map['body'] ?? map['renderedBody'] ?? '';
-    final currentText = _plainText(body);
-    final controller = TextEditingController(text: currentText);
-    final result = await showDialog<String>(
+    
+    // Show rich text editor dialog
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit comment'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
-          maxLines: 5,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: Text(AppLocalizations.of(context).save),
-          ),
-        ],
+      builder: (context) => _CommentEditDialog(
+        issueKey: widget.issueKey,
+        initialBody: body,
+        commentId: commentId,
       ),
     );
-    if (result == null || result.isEmpty || !mounted) return;
+    
+    if (result == null || !mounted) return;
+    
+    final commentText = result['text'] as String?;
+    if (commentText == null || commentText.isEmpty) return;
+    
+    // Comment text already includes attachment markers from the editor
     final api = context.read<JiraApiService>();
-    final err = await api.updateComment(widget.issueKey, commentId, result);
+    final err = await api.updateComment(widget.issueKey, commentId, commentText);
+    
     if (mounted) {
       if (err != null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $err')));
@@ -2945,7 +3185,121 @@ class _CommentBodyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (body is String) {
-      return _LinkableText(body as String, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+      final bodyText = body as String;
+      // Check for attachment markers in plain text
+      // Support both formats:
+      // 1. Custom format: [attachment:ID:filename] or [image:ID:filename]
+      // 2. Jira wiki-markup format: [^filename]
+      final customPattern = RegExp(r'\[(attachment|image):([^:]+):([^\]]+)\]');
+      final wikiPattern = RegExp(r'\[\^([^\]]+)\]');
+      
+      final customMatches = customPattern.allMatches(bodyText);
+      final wikiMatches = wikiPattern.allMatches(bodyText);
+      
+      if (customMatches.isEmpty && wikiMatches.isEmpty) {
+        return _LinkableText(bodyText, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+      }
+      
+      // Combine all matches and sort by position
+      final allMatches = <Map<String, dynamic>>[];
+      for (final match in customMatches) {
+        allMatches.add({
+          'start': match.start,
+          'end': match.end,
+          'type': 'custom',
+          'id': match.group(2) ?? '',
+          'filename': match.group(3) ?? '',
+        });
+      }
+      for (final match in wikiMatches) {
+        allMatches.add({
+          'start': match.start,
+          'end': match.end,
+          'type': 'wiki',
+          'filename': match.group(1) ?? '',
+        });
+      }
+      allMatches.sort((a, b) => (a['start'] as int).compareTo(b['start'] as int));
+      
+      // Build widgets with attachment previews
+      final widgets = <Widget>[];
+      int lastEnd = 0;
+      for (final matchInfo in allMatches) {
+        final start = matchInfo['start'] as int;
+        final end = matchInfo['end'] as int;
+        
+        if (start > lastEnd) {
+          final segment = bodyText.substring(lastEnd, start);
+          if (segment.isNotEmpty) {
+            widgets.add(_LinkableText(segment, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E))));
+          }
+        }
+        
+        final filename = matchInfo['filename'] as String;
+        JiraAttachment att;
+        if (matchInfo['type'] == 'custom') {
+          final attachmentId = matchInfo['id'] as String;
+          att = attachments.firstWhere(
+            (a) => a.id == attachmentId || a.filename == filename,
+            orElse: () => JiraAttachment(id: attachmentId, filename: filename, mimeType: 'application/octet-stream', content: ''),
+          );
+        } else {
+          // Wiki format: match by filename only
+          att = attachments.firstWhere(
+            (a) => a.filename == filename,
+            orElse: () => JiraAttachment(id: '', filename: filename, mimeType: 'application/octet-stream', content: ''),
+          );
+        }
+        
+        final isImage = att.mimeType.startsWith('image/');
+        if (isImage && onNeedLoadImage != null) {
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 4),
+            child: _InlineCommentThumbnail(
+              attachment: att,
+              loadedBytes: loadedImageBytes?[att.id],
+              onNeedLoad: onNeedLoadImage!,
+              onTap: () => onAttachmentPress(att),
+            ),
+          ));
+        } else {
+          widgets.add(Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: InkWell(
+              onTap: () => onAttachmentPress(att),
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: const Color(0xFFF4F5F7), borderRadius: BorderRadius.circular(4)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: 4),
+                    Text(att.filename, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ),
+          ));
+        }
+        
+        lastEnd = end;
+      }
+      
+      if (lastEnd < bodyText.length) {
+        final segment = bodyText.substring(lastEnd);
+        if (segment.isNotEmpty) {
+          widgets.add(_LinkableText(segment, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E))));
+        }
+      }
+      
+      return Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 0,
+        runSpacing: 4,
+        children: widgets,
+      );
     }
     if (body is Map) {
       final content = body['content'];
@@ -3140,9 +3494,9 @@ class _CommentBodyWidget extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.white,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFDFE1E6)),
+                        border: Border.all(color: AppTheme.dividerColor),
                       ),
                       child: Row(
                         children: [
@@ -3194,9 +3548,9 @@ class _CommentBodyWidget extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: AppTheme.white,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFDFE1E6)),
+                        border: Border.all(color: AppTheme.dividerColor),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -3243,11 +3597,13 @@ class _CommentBodyWidget extends StatelessWidget {
 
 /// Full-screen rich text editor for description (QuillEditor + toolbar). Converts ADF ↔ Quill Delta.
 class _DescriptionEditPage extends StatefulWidget {
+  final String issueKey;
   final dynamic initialDescription;
   final List<JiraAttachment> attachments;
   final Map<String, Uint8List> loadedImageBytes;
 
   const _DescriptionEditPage({
+    required this.issueKey,
     required this.initialDescription,
     required this.attachments,
     required this.loadedImageBytes,
@@ -3263,6 +3619,7 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
   final FocusNode _focusNode = FocusNode();
   final Map<String, Uint8List> _previewBytes = {};
   JiraAttachment? _previewAttachment;
+  List<AttachmentItem> _newAttachments = [];
 
   Map<String, Uint8List> get _mergedImageBytes => {...widget.loadedImageBytes, ..._previewBytes};
 
@@ -3302,7 +3659,118 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
     if (att.mimeType.startsWith('image/')) _loadPreviewImage(att);
   }
 
-  void _save() {
+  Future<void> _save() async {
+    // Upload attachments first and insert into description
+    if (_newAttachments.isNotEmpty) {
+      final api = context.read<JiraApiService>();
+      for (final attachment in _newAttachments) {
+        if (!attachment.isUploaded && attachment.hasFile) {
+          Map<String, String>? uploadResult;
+          if (attachment.filePath != null) {
+            uploadResult = await api.uploadAttachment(
+              widget.issueKey,
+              attachment.filePath!,
+              attachment.filename,
+            );
+          } else if (attachment.fileBytes != null) {
+            uploadResult = await api.uploadAttachmentFromBytes(
+              widget.issueKey,
+              attachment.fileBytes!,
+              attachment.filename,
+            );
+          }
+          
+          // If upload successful, insert attachment marker into editor
+          if (uploadResult != null && uploadResult['id'] != null) {
+            final attachmentId = uploadResult['id']!;
+            final filename = uploadResult['filename'] ?? attachment.filename;
+            final mimeType = uploadResult['mimeType'] ?? '';
+            final isImage = mimeType.startsWith('image/') || attachment.isImage;
+            
+            // Insert attachment marker into Quill editor
+            final marker = isImage 
+                ? '[image:$attachmentId:$filename]'
+                : '[attachment:$attachmentId:$filename]';
+            
+            final index = _controller.selection.baseOffset;
+            final currentDelta = _controller.document.toDelta();
+            final currentOps = currentDelta.toJson() as List<dynamic>;
+            final newOps = <dynamic>[];
+            int currentPos = 0;
+            bool inserted = false;
+            
+            for (final op in currentOps) {
+              if (op is Map && !inserted) {
+                final insert = op['insert'];
+                final retain = op['retain'] as int?;
+                if (retain != null) {
+                  if (currentPos + retain <= index) {
+                    newOps.add(op);
+                    currentPos += retain;
+                  } else if (currentPos < index) {
+                    final before = index - currentPos;
+                    final after = retain - before;
+                    if (before > 0) newOps.add({'retain': before});
+                    newOps.add({'insert': marker});
+                    inserted = true;
+                    if (after > 0) newOps.add({'retain': after});
+                    currentPos += retain;
+                  } else {
+                    if (!inserted) {
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                    }
+                    newOps.add(op);
+                    currentPos += retain;
+                  }
+                } else if (insert != null) {
+                  final text = insert.toString();
+                  final textLength = text.length;
+                  if (currentPos + textLength <= index) {
+                    newOps.add(op);
+                    currentPos += textLength;
+                  } else if (currentPos < index) {
+                    final splitPos = index - currentPos;
+                    final before = text.substring(0, splitPos);
+                    final after = text.substring(splitPos);
+                    if (before.isNotEmpty) newOps.add({'insert': before});
+                    newOps.add({'insert': marker});
+                    inserted = true;
+                    if (after.isNotEmpty) {
+                      final afterOp = Map<String, dynamic>.from(op);
+                      afterOp['insert'] = after;
+                      newOps.add(afterOp);
+                    }
+                    currentPos += textLength;
+                  } else {
+                    if (!inserted) {
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                    }
+                    newOps.add(op);
+                    currentPos += textLength;
+                  }
+                } else {
+                  newOps.add(op);
+                }
+              } else {
+                newOps.add(op);
+              }
+            }
+            if (!inserted) {
+              if (currentPos < index) newOps.add({'retain': index - currentPos});
+              newOps.add({'insert': marker});
+            }
+            _controller.document = quill.Document.fromJson(newOps);
+            _controller.updateSelection(
+              TextSelection.collapsed(offset: index + marker.length),
+              quill.ChangeSource.local,
+            );
+          }
+        }
+      }
+    }
+    
     final delta = _controller.document.toDelta();
     final ops = delta.toJson();
     final adf = quillOpsToAdf(ops);
@@ -3457,14 +3925,42 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
             ),
           ),
           Expanded(
-            child: quill.QuillEditor.basic(
-              controller: _controller,
-              config: quill.QuillEditorConfig(
-                placeholder: 'Add description...',
-                padding: const EdgeInsets.all(16),
-              ),
-              focusNode: _focusNode,
-              scrollController: _scrollController,
+            child: Column(
+              children: [
+                Expanded(
+                  child: quill.QuillEditor.basic(
+                    controller: _controller,
+                    config: quill.QuillEditorConfig(
+                      placeholder: 'Add description...',
+                      padding: const EdgeInsets.all(16),
+                    ),
+                    focusNode: _focusNode,
+                    scrollController: _scrollController,
+                  ),
+                ),
+                // Attachment upload widget
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: Color(0xFFDFE1E6), width: 1)),
+                  ),
+                  child: AttachmentUploadWidget(
+                    issueKey: widget.issueKey,
+                    attachments: _newAttachments,
+                    editorController: _controller,
+                    onAttachmentAdded: (attachment) {
+                      setState(() {
+                        _newAttachments.add(attachment);
+                      });
+                    },
+                    onAttachmentRemoved: (attachment) {
+                      setState(() {
+                        _newAttachments.remove(attachment);
+                      });
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -3959,7 +4455,7 @@ class _LinkableText extends StatelessWidget {
       spans.add(TextSpan(
         text: url,
         style: (style.copyWith(
-          color: const Color(0xFF0052CC),
+          color: AppTheme.primary,
           decoration: TextDecoration.underline,
           decorationColor: const Color(0xFF0052CC),
         )),
@@ -3978,6 +4474,298 @@ class _LinkableText extends StatelessWidget {
     }
     return SelectableText.rich(
       TextSpan(children: spans, style: style),
+    );
+  }
+}
+
+/// Rich text comment editor dialog
+class _CommentEditDialog extends StatefulWidget {
+  final String issueKey;
+  final dynamic initialBody;
+  final String commentId;
+
+  const _CommentEditDialog({
+    required this.issueKey,
+    required this.initialBody,
+    required this.commentId,
+  });
+
+  @override
+  State<_CommentEditDialog> createState() => _CommentEditDialogState();
+}
+
+class _CommentEditDialogState extends State<_CommentEditDialog> {
+  late quill.QuillController _controller;
+  final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
+  List<AttachmentItem> _attachments = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Convert ADF to Quill ops
+    final ops = adfToQuillOps(widget.initialBody);
+    quill.Document doc;
+    try {
+      doc = quill.Document.fromJson(ops);
+    } catch (_) {
+      doc = quill.Document.fromJson([{'insert': '\n'}]);
+    }
+    _controller = quill.QuillController(
+      document: doc,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    // Upload attachments first and insert into editor
+    if (_attachments.isNotEmpty && widget.issueKey.isNotEmpty) {
+      final api = context.read<JiraApiService>();
+      for (final attachment in _attachments) {
+        if (!attachment.isUploaded && attachment.hasFile) {
+          Map<String, String>? uploadResult;
+          if (attachment.filePath != null) {
+            uploadResult = await api.uploadAttachment(
+              widget.issueKey,
+              attachment.filePath!,
+              attachment.filename,
+            );
+          } else if (attachment.fileBytes != null) {
+            uploadResult = await api.uploadAttachmentFromBytes(
+              widget.issueKey,
+              attachment.fileBytes!,
+              attachment.filename,
+            );
+          }
+          
+          // If upload successful, insert attachment marker into editor
+          if (uploadResult != null && uploadResult['id'] != null) {
+            final attachmentId = uploadResult['id']!;
+            final filename = uploadResult['filename'] ?? attachment.filename;
+            final mimeType = uploadResult['mimeType'] ?? '';
+            final isImage = mimeType.startsWith('image/') || attachment.isImage;
+            
+            // Insert attachment marker into Quill editor
+            final marker = isImage 
+                ? '[image:$attachmentId:$filename]'
+                : '[attachment:$attachmentId:$filename]';
+            
+            final index = _controller.selection.baseOffset;
+            final currentDelta = _controller.document.toDelta();
+            final currentOps = currentDelta.toJson() as List<dynamic>;
+            final newOps = <dynamic>[];
+            int currentPos = 0;
+            bool inserted = false;
+            
+            for (final op in currentOps) {
+              if (op is Map && !inserted) {
+                final insert = op['insert'];
+                final retain = op['retain'] as int?;
+                if (retain != null) {
+                  if (currentPos + retain <= index) {
+                    newOps.add(op);
+                    currentPos += retain;
+                  } else if (currentPos < index) {
+                    final before = index - currentPos;
+                    final after = retain - before;
+                    if (before > 0) newOps.add({'retain': before});
+                    newOps.add({'insert': marker});
+                    inserted = true;
+                    if (after > 0) newOps.add({'retain': after});
+                    currentPos += retain;
+                  } else {
+                    if (!inserted) {
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                    }
+                    newOps.add(op);
+                    currentPos += retain;
+                  }
+                } else if (insert != null) {
+                  final text = insert.toString();
+                  final textLength = text.length;
+                  if (currentPos + textLength <= index) {
+                    newOps.add(op);
+                    currentPos += textLength;
+                  } else if (currentPos < index) {
+                    final splitPos = index - currentPos;
+                    final before = text.substring(0, splitPos);
+                    final after = text.substring(splitPos);
+                    if (before.isNotEmpty) newOps.add({'insert': before});
+                    newOps.add({'insert': marker});
+                    inserted = true;
+                    if (after.isNotEmpty) {
+                      final afterOp = Map<String, dynamic>.from(op);
+                      afterOp['insert'] = after;
+                      newOps.add(afterOp);
+                    }
+                    currentPos += textLength;
+                  } else {
+                    if (!inserted) {
+                      newOps.add({'insert': marker});
+                      inserted = true;
+                    }
+                    newOps.add(op);
+                    currentPos += textLength;
+                  }
+                } else {
+                  newOps.add(op);
+                }
+              } else {
+                newOps.add(op);
+              }
+            }
+            if (!inserted) {
+              if (currentPos < index) newOps.add({'retain': index - currentPos});
+              newOps.add({'insert': marker});
+            }
+            _controller.document = quill.Document.fromJson(newOps);
+            _controller.updateSelection(
+              TextSelection.collapsed(offset: index + marker.length),
+              quill.ChangeSource.local,
+            );
+          }
+        }
+      }
+    }
+    
+    final delta = _controller.document.toDelta();
+    final ops = delta.toJson();
+    final commentText = _buildCommentTextFromQuill(ops);
+    Navigator.of(context).pop<Map<String, dynamic>>({
+      'text': commentText,
+      'attachments': _attachments,
+    });
+  }
+
+  String _buildCommentTextFromQuill(List<dynamic> ops) {
+    final buffer = StringBuffer();
+    for (final op in ops) {
+      if (op is Map) {
+        final insert = op['insert'];
+        if (insert is String) {
+          buffer.write(insert);
+        } else if (insert is Map) {
+          final mention = insert['mention'];
+          if (mention is Map) {
+            final accountId = mention['id']?.toString() ?? '';
+            final displayName = mention['displayName']?.toString() ?? '';
+            // Use mention marker format expected by API (same as JiraApiService)
+            const zwsp = '\u200B';
+            const sep = '\u200C';
+            buffer.write('$zwsp~$zwsp$accountId$sep$displayName$zwsp~$zwsp');
+          }
+        }
+      }
+    }
+    return buffer.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          children: [
+            AppBar(
+              title: const Text('Edit comment'),
+              leading: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: _save,
+                  child: Text(AppLocalizations.of(context).save),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 56,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: quill.QuillSimpleToolbar(
+                  controller: _controller,
+                  config: const quill.QuillSimpleToolbarConfig(
+                    showUndo: true,
+                    showRedo: true,
+                    showBoldButton: true,
+                    showItalicButton: true,
+                    showUnderLineButton: true,
+                    showStrikeThrough: false,
+                    showInlineCode: true,
+                    showLink: true,
+                    showHeaderStyle: true,
+                    showListNumbers: true,
+                    showListBullets: true,
+                    showListCheck: false,
+                    showCodeBlock: true,
+                    showIndent: false,
+                    showDividers: false,
+                    showSmallButton: false,
+                    showSubscript: false,
+                    showSuperscript: false,
+                    showFontFamily: false,
+                    showFontSize: false,
+                    showColorButton: false,
+                    showBackgroundColorButton: false,
+                    showClearFormat: true,
+                    showAlignmentButtons: false,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: quill.QuillEditor.basic(
+                      controller: _controller,
+                      config: quill.QuillEditorConfig(
+                        placeholder: 'Edit comment...',
+                        padding: const EdgeInsets.all(16),
+                      ),
+                      focusNode: _focusNode,
+                      scrollController: _scrollController,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: Color(0xFFDFE1E6), width: 1)),
+                    ),
+                    child: AttachmentUploadWidget(
+                      issueKey: widget.issueKey,
+                      attachments: _attachments,
+                      editorController: _controller,
+                      onAttachmentAdded: (attachment) {
+                        setState(() {
+                          _attachments.add(attachment);
+                        });
+                      },
+                      onAttachmentRemoved: (attachment) {
+                        setState(() {
+                          _attachments.remove(attachment);
+                        });
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

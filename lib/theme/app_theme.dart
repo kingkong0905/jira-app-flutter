@@ -43,6 +43,41 @@ class AppTheme {
   static const double spaceXl = 24;
   static const double spaceXxl = 32;
 
+  // Font sizes
+  static const double fontSizeXs = 11;
+  static const double fontSizeSm = 12;
+  static const double fontSizeMd = 13;
+  static const double fontSizeBase = 14;
+  static const double fontSizeLg = 16;
+  static const double fontSizeXl = 18;
+  static const double fontSizeXxl = 22;
+  static const double fontSizeXxxl = 28;
+  static const double fontSizeHuge = 48;
+
+  // Icon sizes
+  static const double iconSizeXs = 16;
+  static const double iconSizeSm = 18;
+  static const double iconSizeMd = 20;
+  static const double iconSizeLg = 24;
+  static const double iconSizeXl = 28;
+  static const double iconSizeXxl = 48;
+  static const double iconSizeHuge = 72;
+
+  // Additional colors
+  static const Color white = Colors.white;
+  static const Color black = Colors.black;
+  static const Color black54 = Colors.black54;
+  static const Color black87 = Colors.black87;
+  static const Color black26 = Colors.black26;
+  static const Color black38 = Colors.black38;
+  static const Color white70 = Colors.white70;
+  
+  // Overlay colors
+  static const Color overlayDark = Color(0xFF172B4D);
+  static const Color overlayLight = Color(0xFF5E6C84);
+  static const Color overlayMuted = Color(0xFF7A869A);
+  static const Color dividerColor = Color(0xFFDFE1E6);
+
   static ThemeData get light {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: primary,
