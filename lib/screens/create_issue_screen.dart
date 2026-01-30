@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
 import '../models/jira_models.dart';
 import '../services/jira_api_service.dart';
+import '../l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 import '../utils/adf_quill_converter.dart';
@@ -75,7 +77,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
 
   Future<void> _loadInitialData() async {
     if (widget.projectKey == null) {
-      _showSnack('No project selected', isError: true);
+      _showSnack(AppLocalizations.of(context).noProjectSelected, isError: true);
       widget.onBack();
       return;
     }
@@ -294,7 +296,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red.shade700 : const Color(0xFF0052CC),
+        backgroundColor: isError ? AppTheme.error : AppTheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -307,42 +309,44 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
   }
 
   String _getSelectedPriorityName() {
-    if (_selectedPriorityId == null) return 'None';
+    if (_selectedPriorityId == null) return AppLocalizations.of(context).none;
     final priority = _priorities.where((p) => p['id'] == _selectedPriorityId).firstOrNull;
-    return priority?['name'] as String? ?? 'None';
+    return priority?['name'] as String? ?? AppLocalizations.of(context).none;
   }
 
   String _getSelectedAssigneeName() {
-    if (_selectedAssignee == null) return 'Unassigned';
+    if (_selectedAssignee == null) return AppLocalizations.of(context).unassigned;
     final user = _assignableUsers.where((u) => u.accountId == _selectedAssignee).firstOrNull;
-    return user?.displayName ?? 'Unassigned';
+    return user?.displayName ?? AppLocalizations.of(context).unassigned;
   }
 
   String _getSelectedSprintName() {
-    if (_selectedSprintId == null) return 'None';
+    if (_selectedSprintId == null) return AppLocalizations.of(context).none;
     final sprint = _sprints.where((s) => s.id == _selectedSprintId).firstOrNull;
-    return sprint?.name ?? 'None';
+    return sprint?.name ?? AppLocalizations.of(context).none;
   }
 
   String _getSelectedParentName() {
-    if (_selectedParentKey == null) return 'None';
+    if (_selectedParentKey == null) return AppLocalizations.of(context).none;
     final parent = _parentIssues.where((i) => i.key == _selectedParentKey).firstOrNull;
-    return parent != null ? '${parent.key}: ${parent.fields.summary}' : 'None';
+    return parent != null ? '${parent.key}: ${parent.fields.summary}' : AppLocalizations.of(context).none;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0052CC),
-        foregroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onBack,
+        leading: Semantics(
+          label: AppLocalizations.of(context).back,
+          button: true,
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: widget.onBack,
+          ),
         ),
-        title: const Text('Create Issue', style: TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(AppLocalizations.of(context).createIssue, style: const TextStyle(fontWeight: FontWeight.w600)),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -351,8 +355,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Issue Type
-                  _buildFieldLabel('Issue Type', required: true),
+                  _buildSectionHeader(AppLocalizations.of(context).basics),
+                  const SizedBox(height: 12),
+                  _buildFieldLabel(AppLocalizations.of(context).issueType, required: true),
                   const SizedBox(height: 8),
                   _buildDropdownButton(
                     value: _getSelectedIssueTypeName(),
@@ -360,8 +365,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Priority
-                  _buildFieldLabel('Priority'),
+                  _buildFieldLabel(AppLocalizations.of(context).priority),
                   const SizedBox(height: 8),
                   _buildDropdownButton(
                     value: _getSelectedPriorityName(),
@@ -369,44 +373,41 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Parent (conditional)
                   if (_shouldShowParentField()) ...[
-                    _buildFieldLabel('Parent'),
+                    _buildFieldLabel(AppLocalizations.of(context).parent),
                     const SizedBox(height: 8),
                     _buildDropdownButton(
                       value: _loadingParents 
-                          ? 'Loading...' 
+                          ? AppLocalizations.of(context).loading 
                           : (_parentIssues.isEmpty 
-                              ? 'No parent issues found - Create Epic/Story first' 
+                              ? AppLocalizations.of(context).noParentIssuesFound 
                               : _getSelectedParentName()),
                       onTap: _loadingParents || _parentIssues.isEmpty ? null : () => _showParentPicker(),
                     ),
                     if (_parentIssues.isEmpty && !_loadingParents) ...[
                       const SizedBox(height: 4),
-                      const Text(
-                        'Create an Epic or Story issue first to use as parent',
-                        style: TextStyle(fontSize: 12, color: Color(0xFF6B778C), fontStyle: FontStyle.italic),
+                      Text(
+                        AppLocalizations.of(context).createEpicOrStoryFirst,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted, fontStyle: FontStyle.italic),
                       ),
                     ],
                     const SizedBox(height: 20),
                   ],
 
-                  // Summary
-                  _buildFieldLabel('Summary', required: true),
+                  _buildFieldLabel(AppLocalizations.of(context).summary, required: true),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _summaryController,
-                    decoration: _inputDecoration('Enter issue summary'),
+                    decoration: _inputDecoration(AppLocalizations.of(context).enterIssueSummary),
                     maxLines: 2,
                   ),
                   const SizedBox(height: 20),
 
-                  // Description
-                  _buildFieldLabel('Description'),
+                  _buildFieldLabel(AppLocalizations.of(context).description),
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFDFE1E6)),
+                      border: Border.all(color: AppTheme.border),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
@@ -414,7 +415,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                         // Toolbar
                         Container(
                           decoration: const BoxDecoration(
-                            color: Color(0xFFF4F5F7),
+                            color: AppTheme.surfaceMuted,
                             borderRadius: BorderRadius.vertical(top: Radius.circular(7)),
                           ),
                           child: SingleChildScrollView(
@@ -470,19 +471,20 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-                  // Assignee
-                  _buildFieldLabel('Assignee'),
+                  _buildSectionHeader(AppLocalizations.of(context).details),
+                  const SizedBox(height: 12),
+                  _buildFieldLabel(AppLocalizations.of(context).assignee),
                   const SizedBox(height: 8),
                   _buildAssigneeButton(),
                   const SizedBox(height: 20),
 
                   // Due Date
-                  _buildFieldLabel('Due Date'),
+                  _buildFieldLabel(AppLocalizations.of(context).dueDate),
                   const SizedBox(height: 8),
                   _buildDropdownButton(
-                    value: _dueDate != null ? DateFormat('MMM dd, yyyy').format(_dueDate!) : 'No due date',
+                    value: _dueDate != null ? DateFormat('MMM dd, yyyy').format(_dueDate!) : AppLocalizations.of(context).noDueDate,
                     onTap: () => _showDatePicker(),
                     trailing: _dueDate != null
                         ? IconButton(
@@ -493,44 +495,47 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Story Points
-                  _buildFieldLabel('Story Points'),
+                  _buildFieldLabel(AppLocalizations.of(context).storyPoints),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _storyPointsController,
                     decoration: _inputDecoration('Enter story points (e.g., 3, 5, 8)'),
                     keyboardType: TextInputType.number,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
 
-                  // Sprint
-                  _buildFieldLabel('Sprint'),
+                  _buildSectionHeader(AppLocalizations.of(context).planning),
+                  const SizedBox(height: 12),
+                  _buildFieldLabel(AppLocalizations.of(context).sprint),
                   const SizedBox(height: 8),
                   _buildDropdownButton(
-                    value: _sprints.isEmpty ? 'No sprints available' : _getSelectedSprintName(),
+                    value: _sprints.isEmpty ? AppLocalizations.of(context).noSprintsAvailable : _getSelectedSprintName(),
                     onTap: _sprints.isEmpty ? null : () => _showSprintPicker(),
                   ),
                   const SizedBox(height: 32),
 
-                  // Create Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _creating ? null : _handleCreate,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0052CC),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
+                  Semantics(
+                    label: AppLocalizations.of(context).createIssue,
+                    button: true,
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _creating ? null : _handleCreate,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 0,
+                        ),
+                        child: _creating
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : Text(AppLocalizations.of(context).createIssue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                       ),
-                      child: _creating
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Text('Create Issue', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ],
@@ -539,13 +544,26 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     );
   }
 
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: AppTheme.textPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   Widget _buildFieldLabel(String label, {bool required = false}) {
     return Text.rich(
       TextSpan(
         text: label,
-        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF172B4D)),
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
         children: required
-            ? [const TextSpan(text: ' *', style: TextStyle(color: Colors.red))]
+            ? [const TextSpan(text: ' *', style: TextStyle(color: AppTheme.error))]
             : [],
       ),
     );
@@ -560,7 +578,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFDFE1E6)),
+          border: Border.all(color: AppTheme.border),
         ),
         child: Row(
           children: [
@@ -569,11 +587,11 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                 value,
                 style: TextStyle(
                   fontSize: 14,
-                  color: onTap == null ? Colors.grey : const Color(0xFF172B4D),
+                  color: onTap == null ? AppTheme.textMuted : AppTheme.textPrimary,
                 ),
               ),
             ),
-            trailing ?? const Icon(Icons.arrow_drop_down, color: Color(0xFF6B778C)),
+            trailing ?? const Icon(Icons.arrow_drop_down, color: AppTheme.textMuted),
           ],
         ),
       ),
@@ -593,7 +611,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFDFE1E6)),
+          border: Border.all(color: AppTheme.border),
         ),
         child: Row(
           children: [
@@ -604,7 +622,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                 child: CircleAvatar(
                   radius: 16,
                   backgroundImage: selectedUser.avatar48 != null ? NetworkImage(selectedUser.avatar48!) : null,
-                  backgroundColor: const Color(0xFF0052CC),
+                  backgroundColor: AppTheme.primary,
                   child: selectedUser.avatar48 == null
                       ? Text(
                           selectedUser.displayName.isNotEmpty ? selectedUser.displayName[0].toUpperCase() : '?',
@@ -620,7 +638,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: AppTheme.borderLight,
                     shape: BoxShape.circle,
                   ),
                   child: const Center(
@@ -634,11 +652,11 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                 _getSelectedAssigneeName(),
                 style: const TextStyle(
                   fontSize: 14,
-                  color: Color(0xFF172B4D),
+                  color: AppTheme.textPrimary,
                 ),
               ),
             ),
-            const Icon(Icons.arrow_drop_down, color: Color(0xFF6B778C)),
+            const Icon(Icons.arrow_drop_down, color: AppTheme.textMuted),
           ],
         ),
       ),
@@ -652,15 +670,15 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       fillColor: Colors.white,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFDFE1E6)),
+        borderSide: const BorderSide(color: AppTheme.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFFDFE1E6)),
+        borderSide: const BorderSide(color: AppTheme.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF0052CC), width: 2),
+        borderSide: const BorderSide(color: AppTheme.primary, width: 2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     );
@@ -670,7 +688,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     showModalBottomSheet(
       context: context,
       builder: (context) => _buildPickerSheet(
-        title: 'Select Issue Type',
+        title: AppLocalizations.of(context).selectIssueType,
         items: _issueTypes.map((t) => {'id': t['id'], 'name': t['name']}).toList(),
         selectedId: _selectedIssueTypeId,
         onSelect: (id) {
@@ -693,9 +711,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     showModalBottomSheet(
       context: context,
       builder: (context) => _buildPickerSheet(
-        title: 'Select Priority',
+        title: AppLocalizations.of(context).selectPriority,
         items: [
-          {'id': null, 'name': 'None'},
+          {'id': null, 'name': AppLocalizations.of(context).none},
           ..._priorities.map((p) => {'id': p['id'], 'name': p['name']}).toList(),
         ],
         selectedId: _selectedPriorityId,
@@ -726,9 +744,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     showModalBottomSheet(
       context: context,
       builder: (context) => _buildPickerSheet(
-        title: 'Select Sprint',
+        title: AppLocalizations.of(context).selectSprint,
         items: [
-          {'id': null, 'name': 'None'},
+          {'id': null, 'name': AppLocalizations.of(context).none},
           ..._sprints.map((s) => {'id': s.id, 'name': s.name}).toList(),
         ],
         selectedId: _selectedSprintId,
@@ -776,7 +794,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
               final isSelected = item['id'] == selectedId;
               return ListTile(
                 title: Text(item['name']),
-                trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF0052CC)) : null,
+                trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                 onTap: () => onSelect(item['id']),
               );
             }).toList(),
@@ -795,7 +813,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF0052CC)),
+            colorScheme: const ColorScheme.light(primary: AppTheme.primary),
           ),
           child: child!,
         );
@@ -895,10 +913,10 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Select Assignee',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    AppLocalizations.of(context).selectAssignee,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -921,7 +939,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search assignee...',
+                hintText: AppLocalizations.of(context).searchAssignee,
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _isSearching
                     ? const Padding(
@@ -935,7 +953,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFDFE1E6)),
+                  borderSide: const BorderSide(color: AppTheme.border),
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 isDense: true,
@@ -946,10 +964,10 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
           const SizedBox(height: 12),
           Flexible(
             child: _displayUsers.isEmpty && !_isSearching
-                ? const Padding(
-                    padding: EdgeInsets.all(24),
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
                     child: Center(
-                      child: Text('No users found', style: TextStyle(color: Color(0xFF6B778C))),
+                      child: Text(AppLocalizations.of(context).noUsersFound, style: const TextStyle(color: AppTheme.textMuted)),
                     ),
                   )
                 : ListView(
@@ -962,16 +980,16 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.grey.shade400,
+                              color: AppTheme.border,
                               shape: BoxShape.circle,
                             ),
                             child: const Center(
                               child: Icon(Icons.person_off, color: Colors.white, size: 20),
                             ),
                           ),
-                          title: const Text('Unassigned', style: TextStyle(fontStyle: FontStyle.italic)),
+                          title: Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontStyle: FontStyle.italic)),
                           trailing: widget.selectedAssignee == null
-                              ? const Icon(Icons.check, color: Color(0xFF0052CC))
+                              ? const Icon(Icons.check, color: AppTheme.primary)
                               : null,
                           onTap: () {
                             widget.onSelect(null);
@@ -985,7 +1003,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                           leading: CircleAvatar(
                             radius: 20,
                             backgroundImage: user.avatar48 != null ? NetworkImage(user.avatar48!) : null,
-                            backgroundColor: const Color(0xFF0052CC),
+                            backgroundColor: AppTheme.primary,
                             child: user.avatar48 == null
                                 ? Text(
                                     user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
@@ -995,9 +1013,9 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                           ),
                           title: Text(user.displayName),
                           subtitle: user.emailAddress != null
-                              ? Text(user.emailAddress!, style: const TextStyle(fontSize: 12, color: Color(0xFF6B778C)))
+                              ? Text(user.emailAddress!, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted))
                               : null,
-                          trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF0052CC)) : null,
+                          trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                           onTap: () {
                             widget.onSelect(user.accountId);
                             Navigator.pop(context);
@@ -1178,7 +1196,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search parent issue...',
+                hintText: AppLocalizations.of(context).searchParentIssue,
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _isSearching
                     ? const Padding(
@@ -1192,7 +1210,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFDFE1E6)),
+                  borderSide: const BorderSide(color: AppTheme.border),
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 isDense: true,
@@ -1203,10 +1221,10 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
           const SizedBox(height: 12),
           Flexible(
             child: _displayIssues.isEmpty && !_isSearching
-                ? const Padding(
-                    padding: EdgeInsets.all(24),
+                ? Padding(
+                    padding: const EdgeInsets.all(24),
                     child: Center(
-                      child: Text('No issues found', style: TextStyle(color: Color(0xFF6B778C))),
+                      child: Text(AppLocalizations.of(context).noIssuesFound, style: const TextStyle(color: AppTheme.textMuted)),
                     ),
                   )
                 : ListView.builder(
@@ -1215,9 +1233,9 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                       // "None" option when not searching
                       if (_searchController.text.isEmpty && index == 0) {
                         return ListTile(
-                          title: const Text('None', style: TextStyle(fontStyle: FontStyle.italic)),
+                          title: Text(AppLocalizations.of(context).none, style: const TextStyle(fontStyle: FontStyle.italic)),
                           trailing: widget.selectedParentKey == null
-                              ? const Icon(Icons.check, color: Color(0xFF0052CC))
+                              ? const Icon(Icons.check, color: AppTheme.primary)
                               : null,
                           onTap: () {
                             widget.onSelect(null);
@@ -1237,9 +1255,9 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                           issue.fields.summary,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF6B778C)),
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
                         ),
-                        trailing: isSelected ? const Icon(Icons.check, color: Color(0xFF0052CC)) : null,
+                        trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                         onTap: () {
                           widget.onSelect(issue.key);
                           Navigator.pop(context);

@@ -1,20 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../theme/app_theme.dart';
 import '../models/jira_models.dart';
 import '../services/storage_service.dart';
 import '../services/jira_api_service.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/locale_notifier.dart';
 import '../widgets/logo.dart';
 import '../widgets/issue_card.dart';
 import '../widgets/create_sprint_dialog.dart';
+import '../widgets/update_sprint_dialog.dart';
 import 'issue_detail_screen.dart';
 import 'create_issue_screen.dart';
 
 /// Home: board selector, Board/Backlog tabs, assignee filter, issue list (same flow as reference app).
 class HomeScreen extends StatefulWidget {
   final VoidCallback onOpenSettings;
+  final VoidCallback onLogout;
 
-  const HomeScreen({super.key, required this.onOpenSettings});
+  const HomeScreen({super.key, required this.onOpenSettings, required this.onLogout});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -34,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = true;
   bool _refreshing = false;
   String? _error;
+  bool _errorDismissed = false;
   int _boardsStartAt = 0;
   bool _hasMoreBoards = true;
   bool _loadingMoreBoards = false;
@@ -41,6 +47,14 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _boardDropdownOpen = false;
   Set<int> _collapsedSprints = {};
   bool _backlogCollapsed = false;
+  JiraUser? _currentUser;
+
+  /// Backlog screen shows only User Story, Bug, Task (no Epic, Sub-task, etc.)
+  static const _backlogAllowedIssueTypes = {'user story', 'bug', 'task'};
+
+  bool _isAllowedOnBacklogScreen(JiraIssue issue) {
+    return _backlogAllowedIssueTypes.contains(issue.fields.issuetype.name.toLowerCase());
+  }
 
   @override
   void initState() {
@@ -56,10 +70,14 @@ class _HomeScreenState extends State<HomeScreen> {
       if (config != null) {
         api.initialize(config);
         final defaultId = await storage.getDefaultBoardId();
+        // Load boards and current user in parallel so sidebar shows user even if boards are slow
+        final userFuture = api.getMyself();
         await _loadBoards(reset: true, defaultBoardId: defaultId);
+        final user = await userFuture;
+        if (mounted) setState(() => _currentUser = user);
       }
     } catch (e) {
-      _showSnack('Failed to initialize. Check settings.', isError: true);
+      _showSnack(AppLocalizations.of(context).failedToInitialize, isError: true);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -69,6 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final api = context.read<JiraApiService>();
     setState(() {
       _error = null;
+      _errorDismissed = false;
       if (reset) _boardsStartAt = 0;
     });
     try {
@@ -119,15 +138,18 @@ class _HomeScreenState extends State<HomeScreen> {
         _error = e.toString().replaceAll('JiraApiException(', '').replaceAll(')', '');
         if (_error != null && _error!.length > 120) _error = '${_error!.substring(0, 120)}...';
       });
-      _showSnack('Failed to load boards. Check credentials and connection.', isError: true);
+      _showSnack(AppLocalizations.of(context).failedToLoadBoards, isError: true);
     }
   }
 
-  Future<void> _loadIssuesForBoard(int boardId) async {
+  /// [targetTab] when set (e.g. when switching tabs) forces loading for that tab (0=Board, 1=Backlog, 2=Timeline).
+  Future<void> _loadIssuesForBoard(int boardId, {int? targetTab}) async {
     final api = context.read<JiraApiService>();
+    final tab = targetTab ?? _activeTab;
     setState(() {
       _loading = true;
       _error = null;
+      _errorDismissed = false;
     });
     try {
       final assigneesData = await api.getBoardAssignees(boardId);
@@ -140,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _sprints = sprintsData;
           _activeSprint = sprintsData.where((s) => s.state == 'active').firstOrNull;
         });
-        if ((_activeTab == 0 || _activeTab == 2) && _activeSprint != null) {
+        if ((tab == 0 || tab == 2) && _activeSprint != null) {
           final issues = await api.getSprintIssues(
             boardId,
             _activeSprint!.id,
@@ -148,19 +170,53 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           setState(() {
             _issues = issues;
-            _backlogIssues = [];
+            // Keep previous _backlogIssues so switching back to Backlog shows them until reload
             _assignees = assigneesData;
             _loading = false;
           });
           return;
         }
-        if (_activeTab == 1) {
-          // Backlog tab: Load backlog issues
-          final backlog = await api.getBacklogIssues(
-            boardId,
-            assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
-          );
-          
+        if (tab == 1) {
+          // Backlog tab: Load backlog issues (board backlog API)
+          var backlog = <JiraIssue>[];
+          try {
+            backlog = await api.getBacklogIssues(
+              boardId,
+              assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+            );
+          } catch (e) {
+            debugPrint('Backlog API failed (will try JQL fallback): $e');
+          }
+          // Resolve projectKey for JQL fallback (board list may omit location)
+          String? projectKey = board?.location?.projectKey;
+          if ((projectKey == null || projectKey.isEmpty) && boardId != 0) {
+            final fullBoard = await api.getBoardById(boardId);
+            projectKey = fullBoard?.location?.projectKey;
+          }
+          // Fallback: if board backlog returned empty or threw, try JQL (project AND sprint is EMPTY)
+          if (backlog.isEmpty && projectKey != null && projectKey.isNotEmpty) {
+            try {
+              backlog = await api.getBacklogIssuesByJql(
+                projectKey,
+                assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+              );
+            } catch (e) {
+              debugPrint('Backlog JQL fallback failed: $e');
+            }
+          }
+          // Last resort: fetch all board issues and keep only those with no sprint
+          if (backlog.isEmpty) {
+            try {
+              final allBoard = await api.getBoardIssuesAll(
+                boardId,
+                assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+              );
+              backlog = allBoard.where((i) => i.fields.sprint == null).toList();
+            } catch (e) {
+              debugPrint('Backlog board-issues fallback failed: $e');
+            }
+          }
+
           // Load all sprint issues for backlog view
           final allSprintIssues = <JiraIssue>[];
           final issueKeys = <String>{};
@@ -218,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _backlogIssues = [];
         _loading = false;
       });
-      _showSnack('Failed to load issues.', isError: true);
+      _showSnack(AppLocalizations.of(context).failedToLoadIssues, isError: true);
     }
   }
 
@@ -239,7 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red.shade700 : const Color(0xFF0052CC),
+        backgroundColor: isError ? AppTheme.error : AppTheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -320,18 +376,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final groups = <({String sprint, int? sprintId, List<JiraIssue> issues})>[];
     final addedIssueKeys = <String>{};
     
-    // Add active sprint at the top (always show, even if empty)
+    // Add active sprint at the top (always show, even if empty). Only User Story, Bug, Task.
     if (_activeSprint != null) {
       final activeSprintIssues = _issues.where((issue) {
-        if (issue.fields.sprint != null && 
-            issue.fields.sprint!.id == _activeSprint!.id && 
+        if (!_isAllowedOnBacklogScreen(issue)) return false;
+        if (issue.fields.sprint != null &&
+            issue.fields.sprint!.id == _activeSprint!.id &&
             !addedIssueKeys.contains(issue.key)) {
           addedIssueKeys.add(issue.key);
           return true;
         }
         return false;
       }).toList();
-      
+
       groups.add((
         sprint: _activeSprint!.name,
         sprintId: _activeSprint!.id,
@@ -360,53 +417,58 @@ class _HomeScreenState extends State<HomeScreen> {
     
     for (final sprint in otherSprints) {
       final sprintIssues = _issues.where((issue) {
-        if (issue.fields.sprint != null && 
-            issue.fields.sprint!.id == sprint.id && 
+        if (!_isAllowedOnBacklogScreen(issue)) return false;
+        if (issue.fields.sprint != null &&
+            issue.fields.sprint!.id == sprint.id &&
             !addedIssueKeys.contains(issue.key)) {
           addedIssueKeys.add(issue.key);
           return true;
         }
         return false;
       }).toList();
-      
+
       groups.add((
         sprint: sprint.name,
         sprintId: sprint.id,
         issues: sprintIssues,
       ));
     }
-    
-    // Add backlog issues (exclude Done status and issues already in sprints)
+
+    // Backlog section: only User Story, Bug, Task; exclude resolved/done; no sprint
     final filteredBacklog = _backlogIssues.where((issue) {
-      // Exclude Epic issue types
-      if (issue.fields.issuetype.name.toLowerCase() == 'epic') return false;
-      
-      // Exclude issues with Done status
-      if (issue.fields.status.statusCategory.key == 'done') return false;
-      
-      // Exclude issues that already have a sprint assigned
+      if (!_isAllowedOnBacklogScreen(issue)) return false;
+      if (issue.fields.status.statusCategory.key == 'done') return false; // resolved/done
       if (issue.fields.sprint != null) return false;
-      
-      // Apply search filter
       if (_issueSearch.trim().isNotEmpty) {
         final q = _issueSearch.toLowerCase().trim();
-        if (! (issue.key.toLowerCase().contains(q) || 
-               issue.fields.summary.toLowerCase().contains(q))) {
-          return false;
-        }
+        if (!(issue.key.toLowerCase().contains(q) ||
+            issue.fields.summary.toLowerCase().contains(q))) return false;
       }
-      
       return true;
     }).toList();
-    
-    if (filteredBacklog.isNotEmpty) {
-      groups.add((
-        sprint: 'Backlog',
-        sprintId: null,
-        issues: filteredBacklog,
-      ));
+
+    // Add any issue from _issues that wasn't placed in active or future sprint (e.g. closed sprint)
+    final backlogIssueKeys = filteredBacklog.map((i) => i.key).toSet();
+    for (final issue in _issues) {
+      if (addedIssueKeys.contains(issue.key) || backlogIssueKeys.contains(issue.key)) continue;
+      if (!_isAllowedOnBacklogScreen(issue)) continue;
+      if (issue.fields.status.statusCategory.key == 'done') continue;
+      if (_issueSearch.trim().isNotEmpty) {
+        final q = _issueSearch.toLowerCase().trim();
+        if (!(issue.key.toLowerCase().contains(q) ||
+            issue.fields.summary.toLowerCase().contains(q))) continue;
+      }
+      backlogIssueKeys.add(issue.key);
+      filteredBacklog.add(issue);
     }
-    
+
+    // Always show Backlog section at bottom (even when empty)
+    groups.add((
+      sprint: 'Backlog',
+      sprintId: null,
+      issues: filteredBacklog,
+    ));
+
     return groups;
   }
 
@@ -414,14 +476,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     if (_loading && !_refreshing && _boards.isEmpty) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
+        backgroundColor: AppTheme.surfaceLight,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(color: Color(0xFF0052CC)),
+              const CircularProgressIndicator(color: AppTheme.primary),
               const SizedBox(height: 16),
-              Text('Loading Jira Board...', style: TextStyle(color: Colors.grey.shade600, fontSize: 16)),
+              Text(AppLocalizations.of(context).loadingJiraBoard, style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
             ],
           ),
         ),
@@ -429,18 +491,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: AppTheme.surfaceLight,
+      drawer: _buildDrawer(),
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(),
-            if (_error != null && _error!.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                color: const Color(0xFFFFE5E5),
-                child: Text(_error!, style: const TextStyle(color: Color(0xFFBF2600), fontSize: 13)),
-              ),
+            if (_error != null && _error!.isNotEmpty && !_errorDismissed)
+              _buildErrorBanner(),
             if (_boards.isNotEmpty) _buildBoardSelector(),
             if (_selectedBoard != null) _buildTabs(),
             if (_selectedBoard != null && _selectedBoard!.type.toLowerCase() != 'kanban' && _activeSprint != null && _activeTab == 0)
@@ -461,18 +519,236 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF0052CC),
+        color: Theme.of(context).colorScheme.primary,
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2)),
         ],
       ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Center(child: Logo()),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Builder(
+              builder: (ctx) => Semantics(
+                label: AppLocalizations.of(context).openMenu,
+                button: true,
+                child: IconButton(
+                  onPressed: () => Scaffold.of(ctx).openDrawer(),
+                  icon: const Icon(Icons.menu, color: Colors.white, size: 26),
+                  tooltip: AppLocalizations.of(context).menu,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _loadCurrentUserIfNeeded() async {
+    if (_currentUser != null) return;
+    try {
+      final user = await context.read<JiraApiService>().getMyself();
+      if (mounted) setState(() => _currentUser = user);
+    } catch (_) {}
+  }
+
+  Widget _buildDrawer() {
+    final user = _currentUser;
+    final displayName = (user?.displayName ?? '').trim();
+    final email = (user?.emailAddress ?? '').trim();
+    final showName = displayName.isNotEmpty ? displayName : AppLocalizations.of(context).user;
+    final initial = showName.isNotEmpty ? showName[0].toUpperCase() : '?';
+    final hasAvatar = user != null && (user.avatar48 ?? '').isNotEmpty;
+
+    // If user not loaded yet, fetch when drawer is built (e.g. opened)
+    if (user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadCurrentUserIfNeeded());
+    }
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DrawerHeader(
+              decoration: const BoxDecoration(
+                color: AppTheme.primary,
+              ),
+              margin: EdgeInsets.zero,
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 32,
+                    backgroundColor: Colors.white.withValues(alpha: 0.3),
+                    backgroundImage: hasAvatar ? NetworkImage(user.avatar48!) : null,
+                    child: hasAvatar
+                        ? null
+                        : Text(
+                            initial,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          showName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (email.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            email,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 13,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.language, color: AppTheme.textPrimary),
+              title: Text(AppLocalizations.of(context).language, style: const TextStyle(fontWeight: FontWeight.w500)),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showLanguagePicker();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings, color: AppTheme.textPrimary),
+              title: Text(AppLocalizations.of(context).settings, style: const TextStyle(fontWeight: FontWeight.w500)),
+              onTap: () {
+                Navigator.of(context).pop();
+                widget.onOpenSettings();
+              },
+            ),
+            const Spacer(),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.logout, color: AppTheme.error),
+              title: Text(AppLocalizations.of(context).logout, style: const TextStyle(fontWeight: FontWeight.w500, color: AppTheme.error)),
+              onTap: () {
+                Navigator.of(context).pop();
+                _showLogoutConfirm();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLanguagePicker() async {
+    final l10n = AppLocalizations.of(context);
+    final localeNotifier = context.read<LocaleNotifier>();
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.language),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text(l10n.languageEnglish),
+              onTap: () {
+                localeNotifier.setLocale('en');
+                Navigator.of(context).pop();
+              },
+            ),
+            ListTile(
+              title: Text(l10n.languageVietnamese),
+              onTap: () {
+                localeNotifier.setLocale('vi');
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showLogoutConfirm() async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.logoutConfirmTitle),
+        content: Text(l10n.logoutConfirmMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: Text(l10n.logout),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) widget.onLogout();
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      color: AppTheme.errorBg,
       child: Row(
         children: [
-          const Logo(),
-          const Spacer(),
-          IconButton(
-            onPressed: widget.onOpenSettings,
-            icon: const Icon(Icons.settings, color: Colors.white, size: 26),
+          const Icon(Icons.error_outline, size: 20, color: AppTheme.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _error!,
+              style: const TextStyle(color: AppTheme.error, fontSize: 13),
+            ),
+          ),
+          Semantics(
+            label: AppLocalizations.of(context).retryLoading,
+            button: true,
+            child: TextButton(
+              onPressed: () => _refresh(),
+              child: Text(AppLocalizations.of(context).retry, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.error)),
+            ),
+          ),
+          Semantics(
+            label: AppLocalizations.of(context).dismissError,
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.close, size: 20, color: AppTheme.error),
+              onPressed: () => setState(() => _errorDismissed = true),
+              tooltip: AppLocalizations.of(context).dismiss,
+            ),
           ),
         ],
       ),
@@ -488,25 +764,25 @@ class _HomeScreenState extends State<HomeScreen> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: Color(0xFFF0F0F0))),
+            border: Border(bottom: BorderSide(color: AppTheme.borderLight)),
           ),
           child: Row(
             children: [
               Text(
-                'Board:',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                AppLocalizations.of(context).board + ':',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   _selectedBoard != null
                       ? '${_selectedBoard!.name} (${_selectedBoard!.type})'
-                      : 'Select a board...',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFF172B4D)),
+                      : AppLocalizations.of(context).selectBoard + '...',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(_boardDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: const Color(0xFF5E6C84)),
+              Icon(_boardDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: AppTheme.textSecondary),
             ],
           ),
         ),
@@ -521,9 +797,9 @@ class _HomeScreenState extends State<HomeScreen> {
       color: Colors.white,
       child: Row(
         children: [
-          Expanded(child: _tab(0, 'Board', Icons.dashboard)),
-          Expanded(child: _tab(1, 'Backlog', Icons.inventory_2)),
-          Expanded(child: _tab(2, 'Timeline', Icons.timeline)),
+          Expanded(child: _tab(0, AppLocalizations.of(context).board, Icons.dashboard)),
+          Expanded(child: _tab(1, AppLocalizations.of(context).backlog, Icons.inventory_2)),
+          Expanded(child: _tab(2, AppLocalizations.of(context).timeline, Icons.timeline)),
         ],
       ),
     );
@@ -532,13 +808,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAssigneeFilter() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       color: Colors.white,
       child: Row(
         children: [
           Text(
-            'Assignee:',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+            AppLocalizations.of(context).assignee + ':',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -547,8 +823,8 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _assigneeChip('All', 'all'),
-                  _assigneeChip('Unassigned', 'unassigned'),
+                  _assigneeChip(AppLocalizations.of(context).all, 'all'),
+                  _assigneeChip(AppLocalizations.of(context).unassigned, 'unassigned'),
                   ..._assignees.map((a) => _assigneeChip(a.name, a.key)),
                 ],
               ),
@@ -571,7 +847,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _selectedAssignee = value);
           if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id);
         },
-        selectedColor: const Color(0xFF0052CC),
+        selectedColor: AppTheme.primary,
         checkmarkColor: Colors.white,
       ),
     );
@@ -582,14 +858,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return InkWell(
       onTap: () async {
         setState(() => _activeTab = index);
-        if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id);
+        if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id, targetTab: index);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: active ? const Color(0xFF0052CC) : Colors.transparent,
+              color: active ? AppTheme.primary : Colors.transparent,
               width: 2,
             ),
           ),
@@ -597,14 +873,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: active ? const Color(0xFF0052CC) : const Color(0xFF6B778C)),
+            Icon(icon, size: 18, color: active ? AppTheme.primary : AppTheme.textMuted),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                color: active ? const Color(0xFF0052CC) : const Color(0xFF6B778C),
+                color: active ? AppTheme.primary : AppTheme.textMuted,
               ),
             ),
           ],
@@ -620,16 +896,16 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F7FF),
+        color: AppTheme.primaryBg,
         borderRadius: BorderRadius.circular(14),
-        border: const Border(left: BorderSide(color: Color(0xFF0052CC), width: 4)),
+        border: const Border(left: BorderSide(color: AppTheme.primary, width: 4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('🏃 ${s.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF172B4D))),
+              Text('🏃 ${s.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
             ],
           ),
           if (s.startDate != null || s.endDate != null) ...[
@@ -637,10 +913,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 if (s.startDate != null)
-                  Text('Start: ${_formatDate(s.startDate!)}', style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84))),
+                  Text('Start: ${_formatDate(s.startDate!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                 if (s.startDate != null && s.endDate != null) const SizedBox(width: 16),
                 if (s.endDate != null)
-                  Text('End: ${_formatDate(s.endDate!)}', style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84))),
+                  Text('End: ${_formatDate(s.endDate!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
               ],
             ),
           ],
@@ -660,14 +936,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildIssueSearch() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       child: Row(
         children: [
           Expanded(
             child: TextField(
               onChanged: (v) => setState(() => _issueSearch = v),
               decoration: InputDecoration(
-                hintText: 'Search issues...',
+                hintText: AppLocalizations.of(context).searchIssues,
                 prefixIcon: const Icon(Icons.search, size: 20),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -676,63 +952,33 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          // Create Sprint Button (Backlog tab only)
-          if (_activeTab == 1 && _selectedBoard?.type?.toLowerCase() != 'kanban')
-            Material(
-              color: const Color(0xFF6554C0),
-              borderRadius: BorderRadius.circular(12),
-              child: InkWell(
-                onTap: _openCreateSprint,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add, color: Colors.white, size: 20),
-                      SizedBox(width: 6),
-                      Text(
-                        'Sprint',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          if (_activeTab == 1 && _selectedBoard?.type?.toLowerCase() != 'kanban')
-            const SizedBox(width: 12),
-          // Create Issue Button
-          Material(
-            color: const Color(0xFF0052CC),
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              onTap: _openCreateIssue,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
+          Semantics(
+            label: AppLocalizations.of(context).createIssue,
+            button: true,
+            child: FilledButton.icon(
+              onPressed: _openCreateIssue,
+              icon: const Icon(Icons.add, size: 20),
+              label: Text(AppLocalizations.of(context).create),
+              style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add, color: Colors.white, size: 20),
-                    SizedBox(width: 6),
-                    Text(
-                      'Create',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
+          if (_activeTab == 1 && _selectedBoard != null && _selectedBoard!.type.toLowerCase() != 'kanban') ...[
+            const SizedBox(width: 8),
+            Semantics(
+              label: AppLocalizations.of(context).createSprint,
+              button: true,
+              child: OutlinedButton.icon(
+                onPressed: _openCreateSprint,
+                icon: const Icon(Icons.directions_run, size: 18),
+                label: Text(AppLocalizations.of(context).sprint),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -743,27 +989,60 @@ class _HomeScreenState extends State<HomeScreen> {
       return _buildBoardDropdown();
     }
     if (_selectedBoard == null) {
-      return const Center(
-        child: Text('Select a board to view issues', style: TextStyle(color: Color(0xFF5E6C84), fontSize: 15)),
+      return Center(
+        child: Text(AppLocalizations.of(context).selectBoardToViewIssues, style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
       );
     }
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: Color(0xFF0052CC)));
+      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
     }
-    if (_filteredIssues.isEmpty) {
+    // Backlog tab shows sprint groups + backlog; empty only when no groups at all
+    final isEmptyForCurrentView = _activeTab == 1
+        ? _groupedBySprint.isEmpty
+        : _filteredIssues.isEmpty;
+    if (isEmptyForCurrentView) {
+      final isBacklog = _activeTab == 1;
+      final isScrum = _selectedBoard != null && _selectedBoard!.type.toLowerCase() != 'kanban';
       return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inbox, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            const Text('No issues found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF42526E))),
-            const SizedBox(height: 8),
-            Text(
-              _selectedBoard != null ? 'This board has no issues' : 'Select a board to view issues',
-              style: const TextStyle(fontSize: 15, color: Color(0xFF5E6C84)),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.inbox, size: 64, color: Theme.of(context).colorScheme.outline),
+              const SizedBox(height: AppTheme.spaceLg),
+              Text(
+                AppLocalizations.of(context).noIssuesFound,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppTheme.spaceSm),
+              Text(
+                _selectedBoard != null ? AppLocalizations.of(context).thisBoardHasNoIssues : AppLocalizations.of(context).selectBoardToViewIssues + '.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
+                textAlign: TextAlign.center,
+              ),
+              if (_selectedBoard != null) ...[
+                const SizedBox(height: AppTheme.spaceXl),
+                FilledButton.icon(
+                  onPressed: _openCreateIssue,
+                  icon: const Icon(Icons.add, size: 20),
+                  label: Text(AppLocalizations.of(context).createIssue),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  ),
+                ),
+                if (isBacklog && isScrum) ...[
+                  const SizedBox(height: AppTheme.spaceMd),
+                  OutlinedButton.icon(
+                    onPressed: _openCreateSprint,
+                    icon: const Icon(Icons.directions_run, size: 18),
+                    label: Text(AppLocalizations.of(context).createSprint),
+                  ),
+                ],
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -771,7 +1050,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_activeTab == 0 && _selectedBoard!.type.toLowerCase() != 'kanban' && _groupedByStatus.isNotEmpty) {
       return RefreshIndicator(
         onRefresh: _refresh,
-        color: const Color(0xFF0052CC),
+        color: AppTheme.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: _groupedByStatus.length,
@@ -812,22 +1091,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_activeTab == 2 && _groupedByDueDate.entries.any((e) => e.value.isNotEmpty)) {
       final timelineColors = <String, Color>{
-        'Overdue': const Color(0xFFDE350B),
-        'Today': const Color(0xFF00875A),
-        'This week': const Color(0xFF0052CC),
-        'Next week': const Color(0xFF6554C0),
-        'Later': const Color(0xFF5E6C84),
-        'No due date': const Color(0xFF97A0AF),
+        'Overdue': AppTheme.error,
+        'Today': AppTheme.success,
+        'This week': AppTheme.primary,
+        'Next week': AppTheme.statusTodo,
+        'Later': AppTheme.textSecondary,
+        'No due date': AppTheme.textMuted,
       };
       return RefreshIndicator(
         onRefresh: _refresh,
-        color: const Color(0xFF0052CC),
+        color: AppTheme.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).length,
           itemBuilder: (context, idx) {
             final entry = _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).elementAt(idx);
-            final color = timelineColors[entry.key] ?? const Color(0xFF5E6C84);
+            final color = timelineColors[entry.key] ?? AppTheme.textSecondary;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -844,7 +1123,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '${entry.key} (${entry.value.length})',
+                          '${AppLocalizations.of(context).timelineGroupLabel(entry.key)} (${entry.value.length})',
                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -866,7 +1145,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_activeTab == 1 && _groupedBySprint.isNotEmpty) {
       return RefreshIndicator(
         onRefresh: _refresh,
-        color: const Color(0xFF0052CC),
+        color: AppTheme.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: _groupedBySprint.length,
@@ -901,10 +1180,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isActiveSprint ? const Color(0xFFE3F2FD) : const Color(0xFFF4F5F7),
+                      color: isActiveSprint ? AppTheme.primaryBg : AppTheme.surfaceMuted,
                       borderRadius: BorderRadius.circular(8),
                       border: isActiveSprint
-                          ? Border.all(color: const Color(0xFF0052CC), width: 2)
+                          ? Border.all(color: AppTheme.primary, width: 2)
                           : null,
                     ),
                     child: Row(
@@ -914,7 +1193,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? Icons.chevron_right
                               : Icons.expand_more,
                           size: 20,
-                          color: const Color(0xFF42526E),
+                          color: AppTheme.textSecondary,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -925,11 +1204,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      isBacklog ? '📋 ${group.sprint}' : '🏃 ${group.sprint}',
+                                      isBacklog ? '📋 ${AppLocalizations.of(context).backlog}' : '🏃 ${group.sprint}',
                                       style: const TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w700,
-                                        color: Color(0xFF172B4D),
+                                        color: AppTheme.textPrimary,
                                       ),
                                     ),
                                   ),
@@ -937,17 +1216,51 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF0052CC),
+                                        color: AppTheme.primary,
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      child: const Text(
-                                        'ACTIVE',
+                                      child: Text(
+                                        AppLocalizations.of(context).active,
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
+                                    ),
+                                  if (!isBacklog && group.sprintId != null)
+                                    PopupMenuButton<String>(
+                                      padding: EdgeInsets.zero,
+                                      icon: const Icon(Icons.more_vert, size: 20, color: AppTheme.textSecondary),
+                                      onSelected: (value) {
+                                        if (value == 'update') {
+                                          _openUpdateSprint(group.sprintId!, group.sprint);
+                                        } else if (value == 'delete') {
+                                          _confirmDeleteSprint(group.sprintId!, group.sprint);
+                                        }
+                                      },
+                                      itemBuilder: (context) => [
+                                        PopupMenuItem(
+                                          value: 'update',
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.edit, size: 20, color: AppTheme.textSecondary),
+                                              const SizedBox(width: 8),
+                                              Text(AppLocalizations.of(context).updateSprint),
+                                            ],
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: Row(
+                                            children: [
+                                              const Icon(Icons.delete_outline, size: 20, color: AppTheme.error),
+                                              const SizedBox(width: 8),
+                                              Text(AppLocalizations.of(context).deleteSprint, style: const TextStyle(color: AppTheme.error, fontWeight: FontWeight.w600)),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                 ],
                               ),
@@ -957,7 +1270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   '${group.issues.length} issues  •  ✅ $doneCount  •  🔄 $inProgressCount  •  📝 $todoCount',
                                   style: const TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xFF5E6C84),
+                                    color: AppTheme.textSecondary,
                                   ),
                                 ),
                               ],
@@ -984,7 +1297,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return RefreshIndicator(
       onRefresh: _refresh,
-      color: const Color(0xFF0052CC),
+      color: AppTheme.primary,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         itemCount: _filteredIssues.length,
@@ -999,14 +1312,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Color _statusColor(String? key) {
     switch (key?.toLowerCase()) {
       case 'done':
-        return const Color(0xFF00875A);
+        return AppTheme.statusDone;
       case 'indeterminate':
-        return const Color(0xFF0052CC);
+        return AppTheme.statusInProgress;
       case 'new':
       case 'todo':
-        return const Color(0xFF6554C0);
+        return AppTheme.statusTodo;
       default:
-        return const Color(0xFF999999);
+        return AppTheme.statusDefault;
     }
   }
 
@@ -1023,7 +1336,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 await _loadBoards(reset: true);
               },
               decoration: InputDecoration(
-                hintText: 'Search boards...',
+                hintText: AppLocalizations.of(context).searchBoards,
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 isDense: true,
@@ -1047,7 +1360,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 await _loadBoards(reset: false);
                                 setState(() => _loadingMoreBoards = false);
                               },
-                              child: const Text('Load more'),
+                              child: Text(AppLocalizations.of(context).loadMore),
                             ),
                     ),
                   );
@@ -1057,17 +1370,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 return ListTile(
                   leading: Icon(
                     b.type.toLowerCase() == 'kanban' ? Icons.view_kanban : Icons.directions_run,
-                    color: selected ? const Color(0xFF0052CC) : null,
+                    color: selected ? AppTheme.primary : null,
                   ),
                   title: Text(
                     b.name,
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                      color: selected ? const Color(0xFF0052CC) : const Color(0xFF172B4D),
+                      color: selected ? AppTheme.primary : AppTheme.textPrimary,
                     ),
                   ),
                   subtitle: b.location?.projectName != null ? Text('📁 ${b.location!.projectName}') : null,
-                  trailing: selected ? const Icon(Icons.check, color: Color(0xFF0052CC)) : null,
+                  trailing: selected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                   onTap: () async {
                     setState(() {
                       _selectedBoard = b;
@@ -1099,7 +1412,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openCreateSprint() {
     if (_selectedBoard == null) {
-      _showSnack('Please select a board first', isError: true);
+      _showSnack(AppLocalizations.of(context).pleaseSelectBoardFirst, isError: true);
       return;
     }
 
@@ -1144,27 +1457,123 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
       if (error != null) {
-        _showSnack('Failed to create sprint: $error', isError: true);
+        _showSnack(AppLocalizations.of(context).failedToCreateSprint(error), isError: true);
       } else {
-        _showSnack('Sprint created successfully');
+        _showSnack(AppLocalizations.of(context).sprintCreatedSuccess);
         await _refresh();
       }
     } catch (e) {
-      _showSnack('Error creating sprint: $e', isError: true);
+      _showSnack(AppLocalizations.of(context).errorCreatingSprint(e.toString()), isError: true);
     } finally {
       setState(() => _loading = false);
     }
   }
 
+  void _openUpdateSprint(int sprintId, String sprintName) {
+    final sprint = _sprints.where((s) => s.id == sprintId).firstOrNull;
+    if (sprint == null) return;
+
+    DateTime? start;
+    DateTime? end;
+    if (sprint.startDate != null && sprint.startDate!.isNotEmpty) {
+      start = DateTime.tryParse(sprint.startDate!);
+    }
+    if (sprint.endDate != null && sprint.endDate!.isNotEmpty) {
+      end = DateTime.tryParse(sprint.endDate!);
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => UpdateSprintDialog(
+        sprintId: sprintId,
+        initialName: sprint.name,
+        initialGoal: sprint.goal ?? '',
+        initialStartDate: start,
+        initialEndDate: end,
+        onUpdate: (id, name, goal, startDate, endDate) async {
+          await _handleUpdateSprint(id, name, goal, startDate, endDate);
+        },
+      ),
+    );
+  }
+
+  Future<void> _handleUpdateSprint(
+    int sprintId,
+    String name,
+    String goal,
+    DateTime? startDate,
+    DateTime? endDate,
+  ) async {
+    try {
+      final api = context.read<JiraApiService>();
+      final startStr = startDate != null ? DateFormat('yyyy-MM-dd').format(startDate) : null;
+      final endStr = endDate != null ? DateFormat('yyyy-MM-dd').format(endDate) : null;
+      final error = await api.updateSprint(
+        sprintId: sprintId,
+        name: name,
+        goal: goal.isNotEmpty ? goal : null,
+        startDate: startStr,
+        endDate: endStr,
+      );
+      if (error != null) {
+        _showSnack(AppLocalizations.of(context).failedToUpdateSprint(error), isError: true);
+      } else {
+        _showSnack(AppLocalizations.of(context).sprintUpdated);
+        if (_selectedBoard != null) {
+          await _loadIssuesForBoard(_selectedBoard!.id, targetTab: 1);
+        }
+      }
+    } catch (e) {
+      _showSnack(AppLocalizations.of(context).errorUpdatingSprint(e.toString()), isError: true);
+    }
+  }
+
+  Future<void> _confirmDeleteSprint(int sprintId, String sprintName) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppLocalizations.of(context).deleteSprint),
+        content: Text(AppLocalizations.of(context).deleteSprintConfirm(sprintName)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(AppLocalizations.of(context).cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.error),
+            child: Text(AppLocalizations.of(context).delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final api = context.read<JiraApiService>();
+      final error = await api.deleteSprint(sprintId);
+      if (error != null) {
+        _showSnack(AppLocalizations.of(context).failedToDeleteSprint(error), isError: true);
+      } else {
+        _showSnack(AppLocalizations.of(context).sprintDeleted);
+        if (_selectedBoard != null) {
+          await _loadIssuesForBoard(_selectedBoard!.id, targetTab: 1);
+        }
+      }
+    } catch (e) {
+      _showSnack(AppLocalizations.of(context).errorDeletingSprint(e.toString()), isError: true);
+    }
+  }
+
   void _openCreateIssue() {
     if (_selectedBoard == null) {
-      _showSnack('Please select a board first', isError: true);
+      _showSnack(AppLocalizations.of(context).pleaseSelectBoardFirst, isError: true);
       return;
     }
 
     final projectKey = _selectedBoard!.location?.projectKey;
     if (projectKey == null || projectKey.isEmpty) {
-      _showSnack('Selected board has no project key', isError: true);
+      _showSnack(AppLocalizations.of(context).selectedBoardNoProjectKey, isError: true);
       return;
     }
 

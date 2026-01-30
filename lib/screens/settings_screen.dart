@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
 import '../models/jira_models.dart';
 import '../services/storage_service.dart';
 import '../services/jira_api_service.dart';
+import '../l10n/app_localizations.dart';
 
 /// Settings: email, Jira URL, API token, default board (native only), save, logout (same as reference app).
 class SettingsScreen extends StatefulWidget {
@@ -25,8 +27,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int? _defaultBoardId;
   int? _tempSelectedBoardId;
   bool _showBoardPicker = false;
-  bool _showLogoutConfirm = false;
   String _boardSearch = '';
+  bool _apiTokenObscured = true;
 
   @override
   void initState() {
@@ -79,21 +81,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final apiToken = _apiTokenController.text.trim();
 
     if (email.isEmpty) {
-      _showSnack('Please enter your email', isError: true);
+      _showSnack(AppLocalizations.of(context).pleaseEnterEmail, isError: true);
       return;
     }
     if (jiraUrl.isEmpty) {
-      _showSnack('Please enter your Jira URL', isError: true);
+      _showSnack(AppLocalizations.of(context).pleaseEnterJiraUrl, isError: true);
       return;
     }
     try {
       Uri.parse(jiraUrl);
     } catch (_) {
-      _showSnack('Please enter a valid URL', isError: true);
+      _showSnack(AppLocalizations.of(context).pleaseEnterValidUrl, isError: true);
       return;
     }
     if (apiToken.isEmpty) {
-      _showSnack('Please enter your API token', isError: true);
+      _showSnack(AppLocalizations.of(context).pleaseEnterApiToken, isError: true);
       return;
     }
 
@@ -110,11 +112,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
       await context.read<StorageService>().saveConfig(config);
-      _showSnack('Settings saved successfully!');
+      _showSnack(AppLocalizations.of(context).settingsSavedSuccess);
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) widget.onBack();
     } catch (_) {
-      _showSnack('Failed to save settings.', isError: true);
+      _showSnack(AppLocalizations.of(context).failedToSaveSettings, isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -125,20 +127,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       await context.read<StorageService>().setDefaultBoardId(_tempSelectedBoardId!);
       setState(() => _defaultBoardId = _tempSelectedBoardId);
-      _showSnack('Default board saved');
+      _showSnack(AppLocalizations.of(context).defaultBoardSaved);
     } catch (_) {
-      _showSnack('Failed to save default board', isError: true);
-    }
-  }
-
-  void _confirmLogout() async {
-    try {
-      await context.read<StorageService>().clearConfig();
-      context.read<JiraApiService>().reset();
-      setState(() => _showLogoutConfirm = false);
-      widget.onLogout();
-    } catch (_) {
-      _showSnack('Failed to logout', isError: true);
+      _showSnack(AppLocalizations.of(context).failedToSaveDefaultBoard, isError: true);
     }
   }
 
@@ -147,9 +138,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red.shade700 : const Color(0xFF0052CC),
+        backgroundColor: isError ? AppTheme.error : AppTheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+
+  Widget _buildSection({
+    required String title,
+    String? subtitle,
+    required List<Widget> children,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textPrimary),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
+          ),
+        ],
+        const SizedBox(height: AppTheme.spaceLg),
+        ...children,
+      ],
     );
   }
 
@@ -157,147 +173,125 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
         appBar: AppBar(
-          leading: IconButton(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back)),
-          title: const Text('Settings'),
-          backgroundColor: const Color(0xFF0052CC),
-          foregroundColor: Colors.white,
+          leading: IconButton(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back), tooltip: AppLocalizations.of(context).back),
+          title: Text(AppLocalizations.of(context).settings),
         ),
-        body: const Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     final scaffold = Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        leading: IconButton(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back)),
+        leading: IconButton(onPressed: widget.onBack, icon: const Icon(Icons.arrow_back), tooltip: 'Back'),
         title: const Text('Settings'),
-        backgroundColor: const Color(0xFF0052CC),
-        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(AppTheme.spaceXl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Jira Configuration',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF333333)),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                border: OutlineInputBorder(),
-                filled: true,
-                fillColor: Color(0xFFF9F9F9),
-              ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _jiraUrlController,
-              decoration: const InputDecoration(
-                labelText: 'Jira URL',
-                border: OutlineInputBorder(),
-                filled: true,
-                fillColor: Color(0xFFF9F9F9),
-              ),
-              keyboardType: TextInputType.url,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _apiTokenController,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'API Token',
-                border: OutlineInputBorder(),
-                filled: true,
-                fillColor: Color(0xFFF9F9F9),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Generate a new API token at:\nhttps://id.atlassian.com/manage-profile/security/api-tokens',
-              style: TextStyle(fontSize: 12, color: Color(0xFF666666), height: 1.4),
-            ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0052CC),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _saving
-                  ? const SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text('Save Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(height: 32),
-            const Text(
-              'Default Board',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Select a default board to automatically load on startup.',
-              style: TextStyle(fontSize: 14, color: Color(0xFF5E6C84), height: 1.3),
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: () => setState(() => _showBoardPicker = true),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF9F9F9),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE0E0E0)),
+            _buildSection(
+              title: AppLocalizations.of(context).jiraConfiguration,
+              children: [
+                TextField(
+                  controller: _emailController,
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(context).email,
+                    prefixIcon: Icon(Icons.email_outlined, size: 20),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _tempSelectedBoardId != null
-                            ? (_boards.where((b) => b.id == _tempSelectedBoardId).firstOrNull?.name ?? 'Select a board')
-                            : 'Select a board',
-                        style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D)),
-                      ),
+                const SizedBox(height: AppTheme.spaceLg),
+                TextField(
+                  controller: _jiraUrlController,
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(context).jiraUrl,
+                    prefixIcon: Icon(Icons.link, size: 20),
+                  ),
+                  keyboardType: TextInputType.url,
+                ),
+                const SizedBox(height: AppTheme.spaceLg),
+                TextField(
+                  controller: _apiTokenController,
+                  obscureText: _apiTokenObscured,
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(context).apiToken,
+                    prefixIcon: const Icon(Icons.key, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(_apiTokenObscured ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 22),
+                      onPressed: () => setState(() => _apiTokenObscured = !_apiTokenObscured),
+                      tooltip: _apiTokenObscured ? AppLocalizations.of(context).showToken : AppLocalizations.of(context).hideToken,
                     ),
-                    const Icon(Icons.arrow_drop_down, color: Color(0xFF5E6C84)),
-                  ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: AppTheme.spaceSm),
+                Text(
+                  AppLocalizations.of(context).apiTokenHint,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
+                ),
+                const SizedBox(height: AppTheme.spaceLg),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                  child: _saving
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(AppLocalizations.of(context).saveChanges, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ],
             ),
-            if (_tempSelectedBoardId != _defaultBoardId) ...[
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _saveDefaultBoard,
-                child: const Text('Save Default Board'),
-              ),
-            ],
-            const SizedBox(height: 32),
-            const Text(
-              'Account',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF333333)),
+            const SizedBox(height: AppTheme.spaceXxl),
+            _buildSection(
+              title: AppLocalizations.of(context).defaultBoard,
+              subtitle: AppLocalizations.of(context).defaultBoardSubtitle,
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _showBoardPicker = true),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).cardTheme.color ?? AppTheme.surfaceCard,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.dashboard_outlined, size: 22, color: AppTheme.textMuted),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _tempSelectedBoardId != null
+                                ? (_boards.where((b) => b.id == _tempSelectedBoardId).firstOrNull?.name ?? AppLocalizations.of(context).selectBoard)
+                                : AppLocalizations.of(context).selectBoard,
+                            style: Theme.of(context).textTheme.bodyLarge,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, color: AppTheme.textMuted),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_tempSelectedBoardId != _defaultBoardId) ...[
+                  const SizedBox(height: AppTheme.spaceMd),
+                  OutlinedButton(
+                    onPressed: _saveDefaultBoard,
+                    child: Text(AppLocalizations.of(context).saveDefaultBoard),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: () => setState(() => _showLogoutConfirm = true),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFDE350B),
-                side: const BorderSide(color: Color(0xFFDE350B)),
-                padding: const EdgeInsets.symmetric(vertical: 16),
+            const SizedBox(height: AppTheme.spaceXxl),
+            Center(
+              child: Text(
+                '${AppTheme.appName} ${AppTheme.appVersion}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
               ),
-              child: const Text('Logout', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(height: 32),
-            const Center(
-              child: Text('Jira Manager v1.0.0', style: TextStyle(fontSize: 14, color: Color(0xFF999999))),
             ),
           ],
         ),
@@ -305,12 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       bottomSheet: _showBoardPicker ? _buildBoardPicker() : null,
     );
 
-    return Stack(
-      children: [
-        scaffold,
-        if (_showLogoutConfirm) _buildLogoutDialog(),
-      ],
-    );
+    return scaffold;
   }
 
   Widget _buildBoardPicker() {
@@ -326,7 +315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                const Text('Select Default Board', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                Text(AppLocalizations.of(context).selectDefaultBoard, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 IconButton(
                   onPressed: () => setState(() => _showBoardPicker = false),
@@ -342,10 +331,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 setState(() => _boardSearch = v);
                 await _loadBoards();
               },
-              decoration: const InputDecoration(
-                hintText: 'Search boards...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context).searchBoards,
+                prefixIcon: const Icon(Icons.search),
+                border: const OutlineInputBorder(),
                 isDense: true,
               ),
             ),
@@ -361,7 +350,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   leading: Icon(b.type.toLowerCase() == 'kanban' ? Icons.view_kanban : Icons.directions_run),
                   title: Text(b.name),
                   subtitle: b.location?.projectName != null ? Text(b.location!.projectName!) : null,
-                  trailing: selected ? const Icon(Icons.check, color: Color(0xFF0052CC)) : null,
+                  trailing: selected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                   onTap: () {
                     setState(() {
                       _tempSelectedBoardId = b.id;
@@ -377,56 +366,4 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildLogoutDialog() {
-    return GestureDetector(
-      onTap: () => setState(() => _showLogoutConfirm = false),
-      child: Material(
-        color: Colors.black54,
-        child: Center(
-          child: GestureDetector(
-            onTap: () {}, // block tap from closing when tapping the card
-            child: Container(
-          margin: const EdgeInsets.all(24),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Logout', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              const Text(
-                'Are you sure you want to logout? This will clear all your credentials.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 15, color: Color(0xFF5E6C84), height: 1.4),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => setState(() => _showLogoutConfirm = false),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _confirmLogout,
-                      style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDE350B)),
-                      child: const Text('Logout'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        ),
-        ),
-      ),
-    );
-  }
 }

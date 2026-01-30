@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/jira_models.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_localizations.dart';
 
 /// Issue card with key, status, summary, assignee (same info as reference app).
 class IssueCard extends StatelessWidget {
@@ -11,14 +13,14 @@ class IssueCard extends StatelessWidget {
   static Color _statusColor(String? categoryKey) {
     switch (categoryKey?.toLowerCase()) {
       case 'done':
-        return const Color(0xFF00875A);
+        return AppTheme.statusDone;
       case 'indeterminate':
-        return const Color(0xFF0052CC);
+        return AppTheme.statusInProgress;
       case 'new':
       case 'todo':
-        return const Color(0xFF6554C0);
+        return AppTheme.statusTodo;
       default:
-        return const Color(0xFF999999);
+        return AppTheme.statusDefault;
     }
   }
 
@@ -46,7 +48,7 @@ class IssueCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF0052CC),
+                      color: AppTheme.primary,
                     ),
                   ),
                   const Spacer(),
@@ -80,7 +82,7 @@ class IssueCard extends StatelessWidget {
                 issue.fields.summary,
                 style: const TextStyle(
                   fontSize: 16,
-                  color: Color(0xFF333333),
+                  color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w500,
                 ),
                 maxLines: 2,
@@ -92,14 +94,14 @@ class IssueCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF4F5F7),
+                      color: AppTheme.surfaceMuted,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       issue.fields.issuetype.name,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF5E6C84),
+                        color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -111,7 +113,7 @@ class IssueCard extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 12,
-                          backgroundColor: const Color(0xFF0052CC),
+                          backgroundColor: AppTheme.primary,
                           backgroundImage: issue.fields.assignee!.avatar48 != null
                               ? NetworkImage(issue.fields.assignee!.avatar48!)
                               : null,
@@ -127,12 +129,12 @@ class IssueCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Text(
                           issue.fields.assignee!.displayName,
-                          style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                         ),
                       ],
                     )
                   else
-                    const Text('Unassigned', style: TextStyle(fontSize: 12, color: Color(0xFF666666))),
+                    Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                 ],
               ),
             ],

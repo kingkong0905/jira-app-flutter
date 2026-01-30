@@ -3,24 +3,50 @@ import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
 import '../l10n/app_localizations.dart';
 
-class CreateSprintDialog extends StatefulWidget {
-  final Function(String name, String goal, DateTime? startDate, DateTime? endDate) onCreate;
+/// Dialog to update an existing sprint (name, goal, start/end dates).
+class UpdateSprintDialog extends StatefulWidget {
+  final int sprintId;
+  final String initialName;
+  final String initialGoal;
+  final DateTime? initialStartDate;
+  final DateTime? initialEndDate;
+  final Future<void> Function(
+    int sprintId,
+    String name,
+    String goal,
+    DateTime? startDate,
+    DateTime? endDate,
+  ) onUpdate;
 
-  const CreateSprintDialog({
+  const UpdateSprintDialog({
     super.key,
-    required this.onCreate,
+    required this.sprintId,
+    required this.initialName,
+    this.initialGoal = '',
+    this.initialStartDate,
+    this.initialEndDate,
+    required this.onUpdate,
   });
 
   @override
-  State<CreateSprintDialog> createState() => _CreateSprintDialogState();
+  State<UpdateSprintDialog> createState() => _UpdateSprintDialogState();
 }
 
-class _CreateSprintDialogState extends State<CreateSprintDialog> {
-  final _nameController = TextEditingController();
-  final _goalController = TextEditingController();
-  DateTime? _startDate;
-  DateTime? _endDate;
-  bool _creating = false;
+class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _goalController;
+  late DateTime? _startDate;
+  late DateTime? _endDate;
+  bool _updating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _goalController = TextEditingController(text: widget.initialGoal);
+    _startDate = widget.initialStartDate;
+    _endDate = widget.initialEndDate;
+  }
 
   @override
   void dispose() {
@@ -49,9 +75,7 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
         );
       },
     );
-    if (picked != null) {
-      setState(() => _startDate = picked);
-    }
+    if (picked != null) setState(() => _startDate = picked);
   }
 
   Future<void> _selectEndDate() async {
@@ -74,12 +98,10 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
         );
       },
     );
-    if (picked != null) {
-      setState(() => _endDate = picked);
-    }
+    if (picked != null) setState(() => _endDate = picked);
   }
 
-  Future<void> _handleCreate() async {
+  Future<void> _handleUpdate() async {
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -89,7 +111,6 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
       );
       return;
     }
-
     if (_startDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -99,7 +120,6 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
       );
       return;
     }
-
     if (_endDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -109,7 +129,6 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
       );
       return;
     }
-
     if (_endDate!.isBefore(_startDate!)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -119,14 +138,15 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
       );
       return;
     }
-
-    setState(() => _creating = true);
-    widget.onCreate(
+    setState(() => _updating = true);
+    await widget.onUpdate(
+      widget.sprintId,
       _nameController.text.trim(),
       _goalController.text.trim(),
       _startDate,
       _endDate,
     );
+    if (mounted) Navigator.of(context).pop();
   }
 
   String? _formatDate(DateTime? date) {
@@ -144,7 +164,6 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
@@ -158,7 +177,7 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      AppLocalizations.of(context).createNewSprint,
+                      AppLocalizations.of(context).updateSprintButton,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
@@ -168,21 +187,19 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: AppTheme.textSecondary),
-                    onPressed: _creating ? null : () => Navigator.of(context).pop(),
+                    onPressed: _updating ? null : () => Navigator.of(context).pop(),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
                 ],
               ),
             ),
-            // Body
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Sprint Name
                     Text(
                       AppLocalizations.of(context).sprintName,
                       style: TextStyle(
@@ -211,11 +228,9 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
-                      enabled: !_creating,
+                      enabled: !_updating,
                     ),
                     const SizedBox(height: 20),
-
-                    // Sprint Goal
                     Text(
                       AppLocalizations.of(context).goalOverview,
                       style: TextStyle(
@@ -245,11 +260,9 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                         ),
                         contentPadding: const EdgeInsets.all(12),
                       ),
-                      enabled: !_creating,
+                      enabled: !_updating,
                     ),
                     const SizedBox(height: 20),
-
-                    // Start Date
                     Text(
                       AppLocalizations.of(context).startDate,
                       style: TextStyle(
@@ -260,14 +273,14 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                     ),
                     const SizedBox(height: 8),
                     InkWell(
-                      onTap: _creating ? null : _selectStartDate,
+                      onTap: _updating ? null : _selectStartDate,
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.border),
                           borderRadius: BorderRadius.circular(8),
-                          color: _creating ? AppTheme.surfaceMuted : Colors.white,
+                          color: _updating ? AppTheme.surfaceMuted : Colors.white,
                         ),
                         child: Row(
                           children: [
@@ -285,8 +298,6 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
-                    // End Date
                     Text(
                       AppLocalizations.of(context).endDate,
                       style: TextStyle(
@@ -297,14 +308,14 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                     ),
                     const SizedBox(height: 8),
                     InkWell(
-                      onTap: _creating ? null : _selectEndDate,
+                      onTap: _updating ? null : _selectEndDate,
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.border),
                           borderRadius: BorderRadius.circular(8),
-                          color: _creating ? AppTheme.surfaceMuted : Colors.white,
+                          color: _updating ? AppTheme.surfaceMuted : Colors.white,
                         ),
                         child: Row(
                           children: [
@@ -325,7 +336,6 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                 ),
               ),
             ),
-            // Footer
             Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
@@ -339,7 +349,7 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: _creating ? null : () => Navigator.of(context).pop(),
+                    onPressed: _updating ? null : () => Navigator.of(context).pop(),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     ),
@@ -354,7 +364,7 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
-                    onPressed: _creating ? null : _handleCreate,
+                    onPressed: _updating ? null : _handleUpdate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -362,7 +372,7 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    child: _creating
+                    child: _updating
                         ? const SizedBox(
                             width: 20,
                             height: 20,
@@ -372,7 +382,7 @@ class _CreateSprintDialogState extends State<CreateSprintDialog> {
                             ),
                           )
                         : Text(
-                            AppLocalizations.of(context).createSprintButton,
+                            AppLocalizations.of(context).updateSprintButton,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,

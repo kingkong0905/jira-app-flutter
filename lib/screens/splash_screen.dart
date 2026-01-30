@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../theme/app_theme.dart';
+import '../services/storage_service.dart';
+import '../services/jira_api_service.dart';
 import 'app_shell.dart';
 
-/// Splash screen with Jira logo animation shown on app launch
+/// Splash screen: animation + config check. Navigates when both min duration and check are done.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -14,12 +18,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
 
+  static const _minSplashDuration = Duration(milliseconds: 1200);
+
   @override
   void initState() {
     super.initState();
-    
+
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
 
@@ -38,15 +44,41 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     );
 
     _controller.forward();
+    _navigateWhenReady();
+  }
 
-    // Navigate to app shell after animation
-    Future.delayed(const Duration(milliseconds: 2000), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const AppShell()),
-        );
+  Future<void> _navigateWhenReady() async {
+    final results = await Future.wait<dynamic>([
+      Future.delayed(_minSplashDuration),
+      _checkConfiguration(),
+    ]);
+    if (!mounted) return;
+    final showSetup = results[1] as bool;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => AppShell(
+          initialLoading: false,
+          initialShowSetup: showSetup,
+        ),
+      ),
+    );
+  }
+
+  /// Returns true if setup should be shown (not configured), false if go to home.
+  Future<bool> _checkConfiguration() async {
+    try {
+      final storage = context.read<StorageService>();
+      final api = context.read<JiraApiService>();
+      final configured = await storage.isConfigured();
+      if (configured) {
+        final config = await storage.getConfig();
+        if (config != null) {
+          api.initialize(config);
+          return false; // show home
+        }
       }
-    });
+    } catch (_) {}
+    return true; // show setup
   }
 
   @override
@@ -58,7 +90,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0052CC), // Jira blue
+      backgroundColor: AppTheme.primary,
       body: Center(
         child: AnimatedBuilder(
           animation: _controller,
@@ -70,7 +102,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Jira logo
                     Container(
                       width: 120,
                       height: 120,
@@ -79,7 +110,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -88,27 +119,25 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       child: const Icon(
                         Icons.track_changes,
                         size: 70,
-                        color: Color(0xFF0052CC),
+                        color: AppTheme.primary,
                       ),
                     ),
-                    const SizedBox(height: 30),
-                    // App name
+                    const SizedBox(height: 24),
                     const Text(
-                      'Jira Management',
+                      AppTheme.appName,
                       style: TextStyle(
-                        fontSize: 28,
+                        fontSize: 26,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
-                        letterSpacing: 1.2,
+                        letterSpacing: 1.0,
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    // Tagline
+                    const SizedBox(height: 8),
                     Text(
                       'Track. Plan. Release.',
                       style: TextStyle(
                         fontSize: 14,
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.85),
                         letterSpacing: 0.8,
                       ),
                     ),

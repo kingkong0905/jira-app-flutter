@@ -227,6 +227,7 @@ class JiraApiService {
     int startAt = 0,
     int maxResults = 50,
     String? searchQuery,
+    String? projectKeyOrId,
   }) async {
     final params = <String, String>{
       'startAt': startAt.toString(),
@@ -234,6 +235,9 @@ class JiraApiService {
     };
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
       params['name'] = searchQuery.trim();
+    }
+    if (projectKeyOrId != null && projectKeyOrId.trim().isNotEmpty) {
+      params['projectKeyOrId'] = projectKeyOrId.trim();
     }
     final key = _cacheKey('/rest/agile/1.0/board', params);
     final cached = _getFromCache<BoardsResponse>(key, _cacheDurationMs);
@@ -292,6 +296,42 @@ class JiraApiService {
     final issues = list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
     _setCache(key, issues);
     return issues;
+  }
+
+  /// Fetches all board issues (paginated). Used as fallback for backlog when backlog API and JQL return empty.
+  Future<List<JiraIssue>> getBoardIssuesAll(int boardId, {String? assignee}) async {
+    final results = <JiraIssue>[];
+    int startAt = 0;
+    const maxResults = 100;
+    while (true) {
+      final params = <String, String>{
+        'startAt': '$startAt',
+        'maxResults': '$maxResults',
+        'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+      };
+      if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
+        if (assignee == 'unassigned') {
+          params['jql'] = 'assignee is EMPTY';
+        } else {
+          params['jql'] = 'assignee = "$assignee"';
+        }
+      }
+      final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      final json = jsonDecode(r.body) as Map<String, dynamic>;
+      final list = (json['issues'] as List<dynamic>?) ?? [];
+      for (final e in list) {
+        if (e is Map<String, dynamic>) {
+          try {
+            results.add(JiraIssue.fromJson(e));
+          } catch (_) {}
+        }
+      }
+      if (list.length < maxResults) break;
+      startAt += maxResults;
+    }
+    return results;
   }
 
   Future<List<BoardAssignee>> getBoardAssignees(int boardId) async {
@@ -437,25 +477,85 @@ class JiraApiService {
     return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Fetches all backlog issues (paginated). Board backlog = issues not in any sprint.
+  /// Jira Agile API may return 'issues' or 'values'; we accept both.
   Future<List<JiraIssue>> getBacklogIssues(int boardId, {String? assignee}) async {
-    final params = <String, String>{
-      'maxResults': '100',
-      'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
-    };
+    final results = <JiraIssue>[];
+    int startAt = 0;
+    const maxResults = 100;
+    while (true) {
+      final params = <String, String>{
+        'startAt': '$startAt',
+        'maxResults': '$maxResults',
+        'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+      };
+      if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
+        if (assignee == 'unassigned') {
+          params['jql'] = 'assignee is EMPTY';
+        } else {
+          params['jql'] = 'assignee = "$assignee"';
+        }
+      }
+      final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/backlog').replace(queryParameters: params);
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+
+      final json = jsonDecode(r.body) as Map<String, dynamic>;
+      // Jira Agile backlog: standard key is 'issues'; some responses use 'values' or nest under 'contents'
+      List<dynamic> list = (json['issues'] as List<dynamic>?) ?? (json['values'] as List<dynamic>?) ?? [];
+      if (list.isEmpty && json['contents'] is Map) {
+        final contents = json['contents'] as Map<String, dynamic>;
+        list = (contents['issues'] as List<dynamic>?) ?? (contents['values'] as List<dynamic>?) ?? [];
+      }
+      for (final e in list) {
+        if (e is Map<String, dynamic>) {
+          try {
+            results.add(JiraIssue.fromJson(e));
+          } catch (parseErr) {
+            if (debugLog) debugPrint('[JiraAPI] getBacklogIssues skip issue parse: $parseErr');
+          }
+        }
+      }
+      if (list.length < maxResults) break;
+      startAt += maxResults;
+    }
+    return results;
+  }
+
+  /// Fallback: get issues with no sprint via JQL (project = X AND sprint is EMPTY). Use when board backlog returns empty.
+  Future<List<JiraIssue>> getBacklogIssuesByJql(String projectKey, {String? assignee}) async {
+    final jql = StringBuffer('project = $projectKey AND sprint is EMPTY');
     if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
       if (assignee == 'unassigned') {
-        params['jql'] = 'assignee is EMPTY';
+        jql.write(' AND assignee is EMPTY');
       } else {
-        params['jql'] = 'assignee = "$assignee"';
+        jql.write(' AND assignee = "$assignee"');
       }
     }
-    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/backlog').replace(queryParameters: params);
-    final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
-
-    final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final list = (json['issues'] as List<dynamic>?) ?? [];
-    return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
+    final results = <JiraIssue>[];
+    int startAt = 0;
+    const maxResults = 100;
+    const fields = 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint';
+    while (true) {
+      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {
+        'jql': jql.toString(),
+        'startAt': '$startAt',
+        'maxResults': '$maxResults',
+        'fields': fields,
+      });
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode != 200) return results;
+      final json = jsonDecode(r.body) as Map<String, dynamic>;
+      final list = (json['issues'] as List<dynamic>?) ?? [];
+      for (final e in list) {
+        if (e is Map<String, dynamic>) {
+          results.add(JiraIssue.fromJson(e));
+        }
+      }
+      if (list.length < maxResults) break;
+      startAt += maxResults;
+    }
+    return results;
   }
 
   Future<JiraIssue?> getIssueDetails(String issueKey) async {
@@ -464,7 +564,7 @@ class JiraApiService {
     if (cached != null) return cached;
 
     final params = {
-      'fields': 'summary,description,status,priority,assignee,reporter,issuetype,created,updated,duedate,customfield_10016,comment,parent,attachment',
+      'fields': 'summary,description,status,priority,assignee,reporter,issuetype,created,updated,duedate,customfield_10016,comment,parent,attachment,project,sprint,customfield_10020,subtasks,issuelinks',
     };
     final uri = Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
@@ -476,11 +576,114 @@ class JiraApiService {
     return issue;
   }
 
-  /// Fetch subtasks for an issue (JQL: parent = issueKey). Same logic as reference app.
+  /// Get remote issue links (e.g. Confluence pages). GET /rest/api/3/issue/{key}/remotelink.
+  Future<List<JiraRemoteLink>> getRemoteLinks(String issueKey) async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode != 200) return [];
+      final list = jsonDecode(r.body);
+      if (list is! List) return [];
+      return (list as List<dynamic>)
+          .map((e) => JiraRemoteLink.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Try to get Confluence application id from applinks (for creating Confluence remote link).
+  Future<String?> getConfluenceAppId() async {
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl/rest/applinks/3.0/applinks'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode != 200) return null;
+      final list = jsonDecode(r.body);
+      if (list is! List) return null;
+      for (final e in list as List<dynamic>) {
+        if (e is! Map) continue;
+        final type = stringFromJson(e['type']);
+        if (type != null && type.toLowerCase().contains('confluence')) {
+          final id = stringFromJson(e['id']);
+          if (id != null && id.isNotEmpty) return id;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Create a Confluence page remote link. POST /rest/api/3/issue/{key}/remotelink.
+  /// [pageUrl] full Confluence page URL; [title] display title; [pageId] optional, parsed from URL if not provided.
+  Future<String?> createConfluenceRemoteLink(
+    String issueKey, {
+    required String pageUrl,
+    required String title,
+    String? pageId,
+  }) async {
+    String? pid = pageId;
+    if (pid == null || pid.isEmpty) {
+      final match = RegExp(r'/pages/(\d+)|pageId=(\d+)').firstMatch(pageUrl);
+      if (match != null) pid = match.group(1) ?? match.group(2);
+    }
+    if (pid == null || pid.isEmpty) return 'Could not parse Confluence page ID from URL';
+    final appId = await getConfluenceAppId();
+    final globalId = appId != null
+        ? 'appId=$appId&pageId=$pid'
+        : 'confluencePageId=$pid';
+    final url = pageUrl.trim().isNotEmpty
+        ? pageUrl.trim()
+        : '$_baseUrl/wiki/pages/viewpage.action?pageId=$pid';
+    final body = {
+      'globalId': globalId,
+      'application': {
+        'type': 'com.atlassian.confluence',
+        'name': 'Confluence',
+      },
+      'relationship': 'Wiki Page',
+      'object': {
+        'url': url,
+        'title': title.isNotEmpty ? title : 'Confluence Page',
+      },
+    };
+    try {
+      final r = await http.post(
+        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink'),
+        headers: _headers,
+        body: jsonEncode(body),
+      ).timeout(_timeout);
+      if (r.statusCode == 200 || r.statusCode == 201) return null;
+      return r.body;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Delete a remote issue link. DELETE /rest/api/3/issue/{key}/remotelink/{linkId}.
+  Future<String?> deleteRemoteLink(String issueKey, int linkId) async {
+    try {
+      final r = await http.delete(
+        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink/$linkId'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode == 204 || r.statusCode == 200) return null;
+      return r.body;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Fetch subtasks for an issue (JQL: parent = issueKey). Quoting the key for JQL safety.
   Future<List<JiraIssue>> getSubtasks(String issueKey) async {
+    final jql = 'parent = "$issueKey"';
     final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(
       queryParameters: {
-        'jql': 'parent = $issueKey',
+        'jql': jql,
         'maxResults': '50',
         'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate',
       },
@@ -490,6 +693,52 @@ class JiraApiService {
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final list = (json['issues'] as List<dynamic>?) ?? [];
     return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Fetch all issues that belong to an Epic (Task, Sub-task, Bug, Story, etc.). Tries parentEpic first, then parent = key.
+  Future<List<JiraIssue>> getEpicChildren(String issueKey) async {
+    const fields = 'summary,status,priority,assignee,issuetype,created,updated,duedate';
+    final params = (String jql) => {'jql': jql, 'maxResults': '100', 'fields': fields};
+
+    // 1) parentEpic = key returns direct children + nested sub-tasks (all types) in Jira Cloud
+    try {
+      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: params('parentEpic = "$issueKey"'));
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode == 200) {
+        final json = jsonDecode(r.body) as Map<String, dynamic>;
+        final list = (json['issues'] as List<dynamic>?) ?? [];
+        if (list.isNotEmpty) {
+          return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
+        }
+      }
+    } catch (_) {}
+
+    // 2) Fallback: parent = key (direct children – Task, Bug, Story, Sub-task under Epic)
+    try {
+      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: params('parent = "$issueKey"'));
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode == 200) {
+        final json = jsonDecode(r.body) as Map<String, dynamic>;
+        final list = (json['issues'] as List<dynamic>?) ?? [];
+        if (list.isNotEmpty) {
+          return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
+        }
+      }
+    } catch (_) {}
+
+    // 3) Fallback: "Epic Link" = key (classic/company-managed projects using Epic Link field)
+    try {
+      final jql = '"Epic Link" = "$issueKey"';
+      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {'jql': jql, 'maxResults': '100', 'fields': fields});
+      final r = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (r.statusCode == 200) {
+        final json = jsonDecode(r.body) as Map<String, dynamic>;
+        final list = (json['issues'] as List<dynamic>?) ?? [];
+        return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+
+    return [];
   }
 
   /// Get available transitions for an issue (for status change). GET /rest/api/3/issue/{key}/transitions.
@@ -581,18 +830,89 @@ class JiraApiService {
     return (json['comments'] as List<dynamic>?) ?? [];
   }
 
-  /// Build simple ADF body from plain text for comment add/update.
+  /// Invisible markers in comment text: zwsp~zwsp + accountId + sep + displayName + zwsp~zwsp (user sees only "@displayName").
+  static const String _mentionMarkerZwsp = '\u200B';
+  static const String _mentionMarkerSep = '\u200C';
+
+  /// Remove visible "@DisplayName" before each mention marker so we send clean text to the API (no duplicate when building ADF).
+  static String _removeDuplicateMentionDisplay(String text) {
+    final pattern = RegExp(
+      '${RegExp.escape(_mentionMarkerZwsp)}~$_mentionMarkerZwsp([^$_mentionMarkerSep]+)$_mentionMarkerSep([^$_mentionMarkerZwsp]*)$_mentionMarkerZwsp~$_mentionMarkerZwsp',
+    );
+    final matches = pattern.allMatches(text).toList();
+    if (matches.isEmpty) return text;
+    final buffer = StringBuffer();
+    int lastEnd = 0;
+    for (final match in matches) {
+      final displayName = match.group(2) ?? '';
+      final visibleMention = '@$displayName';
+      final segmentEnd = match.start;
+      if (segmentEnd > lastEnd) {
+        String segment = text.substring(lastEnd, segmentEnd);
+        if (segment.endsWith(visibleMention)) {
+          segment = segment.substring(0, segment.length - visibleMention.length);
+        }
+        buffer.write(segment);
+      }
+      buffer.write(text.substring(match.start, match.end));
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      buffer.write(text.substring(lastEnd));
+    }
+    return buffer.toString();
+  }
+
+  /// Build ADF body from comment text. Parses mention markers into ADF mention nodes (id + display text).
   static Map<String, dynamic> _commentBodyAdf(String text) {
     final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      return {
+        'body': {
+          'type': 'doc',
+          'version': 1,
+          'content': [
+            {'type': 'paragraph', 'content': []},
+          ],
+        },
+      };
+    }
+    final normalized = _removeDuplicateMentionDisplay(trimmed);
+    final pattern = RegExp(
+      '${RegExp.escape(_mentionMarkerZwsp)}~$_mentionMarkerZwsp([^$_mentionMarkerSep]+)$_mentionMarkerSep([^$_mentionMarkerZwsp]*)$_mentionMarkerZwsp~$_mentionMarkerZwsp',
+    );
+    final List<Map<String, dynamic>> paragraphContent = [];
+    int lastEnd = 0;
+    for (final match in pattern.allMatches(normalized)) {
+      if (match.start > lastEnd) {
+        final segment = normalized.substring(lastEnd, match.start);
+        if (segment.isNotEmpty) {
+          paragraphContent.add({'type': 'text', 'text': segment});
+        }
+      }
+      final accountId = match.group(1) ?? '';
+      final displayName = match.group(2) ?? '';
+      paragraphContent.add({
+        'type': 'mention',
+        'attrs': {'id': accountId, 'text': displayName.isEmpty ? '@$accountId' : '@$displayName'},
+      });
+      lastEnd = match.end;
+    }
+    if (lastEnd < normalized.length) {
+      final segment = normalized.substring(lastEnd);
+      if (segment.isNotEmpty) {
+        paragraphContent.add({'type': 'text', 'text': segment});
+      }
+    }
+    if (paragraphContent.isEmpty) {
+      paragraphContent.add({'type': 'text', 'text': normalized});
+    }
     return {
       'body': {
         'type': 'doc',
         'version': 1,
         'content': [
-          {
-            'type': 'paragraph',
-            'content': trimmed.isEmpty ? [] : [{'type': 'text', 'text': trimmed}],
-          },
+          {'type': 'paragraph', 'content': paragraphContent},
         ],
       },
     };
@@ -665,6 +985,49 @@ class JiraApiService {
         .timeout(_timeout);
     if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
     clearCache();
+  }
+
+  /// Update sprint. PUT /rest/agile/1.0/sprint/{sprintId}
+  Future<String?> updateSprint({
+    required int sprintId,
+    required String name,
+    String? goal,
+    String? startDate,
+    String? endDate,
+  }) async {
+    try {
+      final body = <String, dynamic>{'name': name};
+      if (goal != null) body['goal'] = goal;
+      if (startDate != null) body['startDate'] = startDate;
+      if (endDate != null) body['endDate'] = endDate;
+      final r = await http
+          .put(
+            Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(_timeout);
+      if (r.statusCode != 200) return 'Failed to update sprint: ${r.statusCode}';
+      clearCache();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Delete sprint. DELETE /rest/agile/1.0/sprint/{sprintId}
+  /// Accepts 200 OK or 204 No Content as success.
+  Future<String?> deleteSprint(int sprintId) async {
+    try {
+      final r = await http
+          .delete(Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'), headers: _headers)
+          .timeout(_timeout);
+      if (r.statusCode != 200 && r.statusCode != 204) return 'Failed to delete sprint: ${r.statusCode}';
+      clearCache();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 
   /// Get issue types for a project. GET /rest/api/3/project/{projectKey}/statuses
@@ -829,6 +1192,54 @@ class JiraApiService {
       ).timeout(_timeout);
     } catch (_) {
       // Ignore errors when moving to sprint
+    }
+  }
+
+  /// Move an issue to a sprint (public). Returns error message or null on success.
+  Future<String?> moveIssueToSprint(String issueKey, int sprintId) async {
+    try {
+      final body = jsonEncode({'issues': [issueKey]});
+      final r = await http.post(
+        Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId/issue'),
+        headers: _headers,
+        body: body,
+      ).timeout(_timeout);
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        _cache.remove(_cacheKey('/rest/api/3/issue/$issueKey', {}));
+        return null;
+      }
+      try {
+        final err = jsonDecode(r.body) as Map<String, dynamic>;
+        final msgs = err['errorMessages'] as List<dynamic>?;
+        if (msgs != null && msgs.isNotEmpty) return msgs.join(', ');
+      } catch (_) {}
+      return 'Failed to move issue: ${r.statusCode}';
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Move an issue to the backlog for a board. POST /rest/agile/1.0/backlog/{boardId}/issue
+  Future<String?> moveIssueToBacklog(String issueKey, int boardId) async {
+    try {
+      final body = jsonEncode({'issues': [issueKey]});
+      final r = await http.post(
+        Uri.parse('$_baseUrl/rest/agile/1.0/backlog/$boardId/issue'),
+        headers: _headers,
+        body: body,
+      ).timeout(_timeout);
+      if (r.statusCode >= 200 && r.statusCode < 300) {
+        _cache.remove(_cacheKey('/rest/api/3/issue/$issueKey', {}));
+        return null;
+      }
+      try {
+        final err = jsonDecode(r.body) as Map<String, dynamic>;
+        final msgs = err['errorMessages'] as List<dynamic>?;
+        if (msgs != null && msgs.isNotEmpty) return msgs.join(', ');
+      } catch (_) {}
+      return 'Failed to move to backlog: ${r.statusCode}';
+    } catch (e) {
+      return e.toString();
     }
   }
 }

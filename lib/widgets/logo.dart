@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
+import '../l10n/app_localizations.dart';
 
-/// Branded "Jira Management" logo (same concept as reference app).
+/// Branded logo using [AppTheme.appName].
 class Logo extends StatelessWidget {
   const Logo({super.key});
 
@@ -22,7 +24,7 @@ class Logo extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         const Text(
-          'Jira Management',
+          AppTheme.appName,
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w700,
@@ -31,7 +33,7 @@ class Logo extends StatelessWidget {
           ),
         ),
         Text(
-          'Task Manager',
+          AppLocalizations.of(context).taskManager,
           style: TextStyle(
             fontSize: 13,
             color: Colors.white.withValues(alpha: 0.85),

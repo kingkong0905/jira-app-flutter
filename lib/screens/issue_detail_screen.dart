@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart' as url_launcher;
@@ -12,6 +13,7 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:video_player/video_player.dart';
 import '../models/jira_models.dart';
 import '../services/jira_api_service.dart';
+import '../l10n/app_localizations.dart';
 import '../utils/adf_quill_converter.dart';
 
 /// Issue detail: structure and logic aligned with reference (kingkong0905/jira-app IssueDetailsScreen).
@@ -61,6 +63,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   bool _showPriorityPicker = false;
   bool _showStoryPointsPicker = false;
   bool _showDueDatePicker = false;
+  bool _showSprintPicker = false;
   List<Map<String, dynamic>> _transitions = [];
   List<JiraUser> _assignableUsers = [];
   List<Map<String, dynamic>> _priorities = [];
@@ -75,27 +78,194 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   String _storyPointsInput = '';
   DateTime? _selectedDueDate;
   TextEditingController? _storyPointsController;
+  // Sprint picker
+  bool _loadingSprints = false;
+  List<JiraSprint> _sprints = [];
+  int? _boardIdForSprint;
+  bool _updatingSprint = false;
+  bool _updatingSprintToBacklog = false;
+  int? _updatingSprintId;
   // Description edit
   bool _updatingDescription = false;
   // Assignee search
   final TextEditingController _assigneeSearchController = TextEditingController();
   Timer? _assigneeSearchTimer;
+  // Mention suggestions for comments
+  bool _showMentionSuggestions = false;
+  List<JiraUser> _mentionSuggestions = [];
+  bool _loadingMentions = false;
+  Timer? _mentionSearchTimer;
+  int _mentionStartPosition = -1; // Position of "@" in comment text
+  OverlayEntry? _mentionOverlayEntry;
+  final GlobalKey _commentInputKey = GlobalKey();
+  Offset? _mentionOverlayOffset;
+  Size? _mentionOverlaySize;
+  // Confluence (remote links from Jira API)
+  List<JiraRemoteLink> _confluenceLinks = [];
+  bool _loadingConfluenceLinks = false;
+  int? _deletingConfluenceLinkId;
+  // Epic children (when issue is Epic)
+  List<JiraIssue> _epicChildren = [];
+  bool _loadingEpicChildren = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Listen to comment text changes for mention detection
+    _newCommentController.addListener(_onCommentTextChanged);
   }
 
   @override
   void dispose() {
+    _mentionOverlayEntry?.remove();
+    _mentionOverlayEntry = null;
     _previewVideoController?.dispose();
     _previewVideoController = null;
+    _newCommentController.removeListener(_onCommentTextChanged);
     _newCommentController.dispose();
     _storyPointsController?.dispose();
     _assigneeSearchController.dispose();
     _assigneeSearchTimer?.cancel();
+    _mentionSearchTimer?.cancel();
     super.dispose();
+  }
+
+  void _removeMentionOverlay() {
+    _mentionOverlayEntry?.remove();
+    _mentionOverlayEntry = null;
+  }
+
+  void _hideMentionOverlay() {
+    _removeMentionOverlay();
+    setState(() {
+      _showMentionSuggestions = false;
+      _mentionStartPosition = -1;
+    });
+  }
+
+  void _showMentionOverlay() {
+    _removeMentionOverlay();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_showMentionSuggestions || _mentionSuggestions.isEmpty) return;
+      final box = _commentInputKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      _mentionOverlayOffset = box.localToGlobal(Offset.zero);
+      _mentionOverlaySize = box.size;
+      _mentionOverlayEntry = OverlayEntry(
+        builder: (context) => _buildMentionOverlayContent(),
+      );
+      Overlay.of(context).insert(_mentionOverlayEntry!);
+    });
+  }
+
+  /// Overlay content for mention list so it can scroll and receive taps (outside SingleChildScrollView).
+  Widget _buildMentionOverlayContent() {
+    final offset = _mentionOverlayOffset ?? Offset.zero;
+    final size = _mentionOverlaySize ?? Size(MediaQuery.of(context).size.width, 100);
+    const listHeight = 200.0;
+    final top = (offset.dy - listHeight).clamp(0.0, double.infinity);
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _hideMentionOverlay,
+          ),
+        ),
+        Positioned(
+          left: offset.dx,
+          top: top,
+          width: size.width,
+          height: listHeight,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFDFE1E6)),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ListView.separated(
+                physics: const ClampingScrollPhysics(),
+                padding: EdgeInsets.zero,
+                itemCount: _mentionSuggestions.length,
+                separatorBuilder: (context, index) => const Divider(height: 1, thickness: 1),
+                itemBuilder: (context, index) {
+                  final user = _mentionSuggestions[index];
+                  return InkWell(
+                    onTap: () => _insertMention(user),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      child: Row(
+                        children: [
+                          if (user.avatarUrls?['48x48'] != null)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
+                              child: Image.network(
+                                user.avatarUrls!['48x48']!,
+                                width: 36,
+                                height: 36,
+                                errorBuilder: (context, error, stackTrace) => _mentionAvatarPlaceholder(user),
+                              ),
+                            )
+                          else
+                            _mentionAvatarPlaceholder(user),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  user.displayName,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF172B4D),
+                                  ),
+                                ),
+                                if (user.emailAddress != null && user.emailAddress!.isNotEmpty)
+                                  Text(
+                                    user.emailAddress!,
+                                    style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A)),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _mentionAvatarPlaceholder(JiraUser user) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0052CC),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Center(
+        child: Text(
+          user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _load() async {
@@ -114,9 +284,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           _comments = comments;
           _currentUser = currentUser;
           _loading = false;
+          _subtasks = issue?.fields.subtasks ?? [];
         });
         _loadSubtasks();
         _loadParent(issue);
+        _loadConfluenceLinks();
+        if ((issue?.fields.issuetype.name ?? '').toLowerCase().contains('epic')) _loadEpicChildren();
       }
     } catch (e) {
       if (mounted) {
@@ -133,15 +306,84 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     setState(() => _loadingSubtasks = true);
     try {
       final list = await api.getSubtasks(widget.issueKey);
+      if (mounted) {
+        if (list.isNotEmpty) {
+          setState(() {
+            _loadingSubtasks = false;
+            _subtasks = list;
+          });
+          return;
+        }
+        _subtasks = _subtasks;
+      }
+      // Fallback: subtasks from fields.subtasks are minimal and often lack assignee. Enrich with full details.
+      if (_subtasks.isEmpty) {
+        if (mounted) setState(() => _loadingSubtasks = false);
+        return;
+      }
+      final enriched = <JiraIssue>[];
+      for (final st in _subtasks) {
+        if (st.key.isEmpty) continue;
+        try {
+          final full = await api.getIssueDetails(st.key);
+          if (full != null && mounted) enriched.add(full);
+          else if (mounted) enriched.add(st);
+        } catch (_) {
+          if (mounted) enriched.add(st);
+        }
+      }
       if (mounted) setState(() {
-        _subtasks = list;
+        _subtasks = enriched.isNotEmpty ? enriched : _subtasks;
         _loadingSubtasks = false;
       });
     } catch (_) {
       if (mounted) setState(() {
-        _subtasks = [];
         _loadingSubtasks = false;
       });
+      // On error, try to enrich fallback subtasks so assignee is shown
+      if (mounted && _subtasks.isNotEmpty) {
+        final api = context.read<JiraApiService>();
+        final enriched = <JiraIssue>[];
+        for (final st in _subtasks) {
+          if (st.key.isEmpty) continue;
+          try {
+            final full = await api.getIssueDetails(st.key);
+            if (full != null && mounted) enriched.add(full);
+            else if (mounted) enriched.add(st);
+          } catch (_) {
+            if (mounted) enriched.add(st);
+          }
+        }
+        if (mounted && enriched.isNotEmpty) setState(() => _subtasks = enriched);
+      }
+    }
+  }
+
+  Future<void> _loadEpicChildren() async {
+    final api = context.read<JiraApiService>();
+    setState(() => _loadingEpicChildren = true);
+    try {
+      final list = await api.getEpicChildren(widget.issueKey);
+      if (mounted) setState(() {
+        _epicChildren = list;
+        _loadingEpicChildren = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingEpicChildren = false);
+    }
+  }
+
+  Future<void> _loadConfluenceLinks() async {
+    final api = context.read<JiraApiService>();
+    setState(() => _loadingConfluenceLinks = true);
+    try {
+      final list = await api.getRemoteLinks(widget.issueKey);
+      if (mounted) setState(() {
+        _confluenceLinks = list.where((l) => l.isConfluence).toList();
+        _loadingConfluenceLinks = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingConfluenceLinks = false);
     }
   }
 
@@ -243,18 +485,18 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                             const SizedBox(height: 24),
                             FilledButton(
                               onPressed: _load,
-                              child: const Text('Retry'),
+                              child: Text(AppLocalizations.of(context).retry),
                             ),
                           ],
                         ),
                       ),
                     )
                   : _issue == null
-                      ? const Center(child: Text('Issue not found'))
+                      ? Center(child: Text(AppLocalizations.of(context).issueNotFound))
                       : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _buildSummaryCard(),
                           _buildDetailsCard(),
@@ -262,53 +504,91 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           _buildDescriptionCard(),
                           if ((_issue!.fields.attachment ?? []).isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            const Text('Attachments', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).attachments, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
                             _buildAttachmentsSection(),
                           ],
                           if (_issue!.fields.parent != null) ...[
                             const SizedBox(height: 24),
-                            const Text('Parent', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).parent, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                             const SizedBox(height: 8),
                             _buildParentCard(),
                           ],
                           const SizedBox(height: 24),
-                          const Text('Subtasks', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).subtasks, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 8),
                           _buildSubtasksSection(),
+                          if (_issue!.fields.issuetype.name.toLowerCase().contains('epic')) ...[
+                            const SizedBox(height: 24),
+                            Text(AppLocalizations.of(context).issuesInThisEpic, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 8),
+                            _buildEpicChildrenSection(),
+                          ],
+                          if ((_issue!.fields.issuelinks ?? []).isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            Text(AppLocalizations.of(context).linkedWorkItems, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 8),
+                            _buildLinkedWorkItemsSection(),
+                          ],
                           const SizedBox(height: 24),
-                          const Text('Comments', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).confluence, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          _buildConfluenceSection(),
+                          const SizedBox(height: 24),
+                          Text(AppLocalizations.of(context).comments, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                           const SizedBox(height: 12),
                           if (_replyToCommentId != null) _buildReplyBanner(),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                          Stack(
+                            key: _commentInputKey,
+                            clipBehavior: Clip.none,
                             children: [
-                              Expanded(
-                                child: TextField(
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                final useStacked = constraints.maxWidth < 400;
+                                final inputField = TextField(
                                   controller: _newCommentController,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Add a comment... (type @ to mention)',
-                                    border: OutlineInputBorder(),
+                                  decoration: InputDecoration(
+                                    hintText: AppLocalizations.of(context).addCommentHint,
+                                    border: const OutlineInputBorder(),
                                     isDense: true,
                                   ),
-                                  maxLines: 4,
+                                  maxLines: useStacked ? 3 : 4,
                                   minLines: 1,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton(
-                                onPressed: _addingComment ? null : _onAddComment,
-                                child: _addingComment
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Text('Post comment'),
+                                );
+                                final postButton = FilledButton(
+                                  onPressed: _addingComment ? null : _onAddComment,
+                                  child: _addingComment
+                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                      : Text(AppLocalizations.of(context).postComment),
+                                );
+                                if (useStacked) {
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      inputField,
+                                      const SizedBox(height: 10),
+                                      postButton,
+                                    ],
+                                  );
+                                }
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Expanded(child: inputField),
+                                    const SizedBox(width: 8),
+                                    postButton,
+                                  ],
+                                );
+                                },
                               ),
                             ],
                           ),
                           const SizedBox(height: 16),
                           if (_comments.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 8),
-                              child: Text('No comments yet. Be the first to comment!', style: TextStyle(color: Color(0xFF5E6C84), fontStyle: FontStyle.italic)),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(AppLocalizations.of(context).noCommentsYet, style: const TextStyle(color: Color(0xFF5E6C84), fontStyle: FontStyle.italic)),
                             )
                           else
                             ..._commentTreeWidgets(),
@@ -322,6 +602,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           if (_showPriorityPicker) _buildPriorityPickerModal(),
           if (_showStoryPointsPicker) _buildStoryPointsModal(),
           if (_showDueDatePicker) _buildDueDateModal(),
+          if (_showSprintPicker) _buildSprintPickerModal(),
         ],
       ),
     );
@@ -436,7 +717,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                             ? InteractiveViewer(
                                 child: Image.memory(bytes, fit: BoxFit.contain),
                               )
-                            : const Text('Failed to load image', style: TextStyle(color: Colors.white)))
+                            : Text(AppLocalizations.of(context).failedToLoadImage, style: const TextStyle(color: Colors.white)))
                     : isVideo
                         ? (videoError != null
                             ? Padding(
@@ -446,7 +727,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                   children: [
                                     const Icon(Icons.error_outline, color: Colors.white, size: 48),
                                     const SizedBox(height: 16),
-                                    Text('Video failed to load', style: const TextStyle(color: Colors.white, fontSize: 16)),
+                                    Text(AppLocalizations.of(context).videoFailedToLoad, style: const TextStyle(color: Colors.white, fontSize: 16)),
                                     const SizedBox(height: 8),
                                     Text(videoError, style: const TextStyle(color: Colors.white70, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
                                     const SizedBox(height: 24),
@@ -463,21 +744,21 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                         _closePreviewOverlay();
                                       },
                                       icon: const Icon(Icons.open_in_new),
-                                      label: const Text('Open externally'),
+                                      label: Text(AppLocalizations.of(context).openExternally),
                                     ),
                                   ],
                                 ),
                               )
                             : videoController != null && videoController.value.isInitialized
                                 ? _buildVideoPreviewPlayer(videoController)
-                                : const Padding(
-                                    padding: EdgeInsets.all(24),
+                                : Padding(
+                                    padding: const EdgeInsets.all(24),
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        CircularProgressIndicator(color: Colors.white),
-                                        SizedBox(height: 16),
-                                        Text('Loading video...', style: TextStyle(color: Colors.white, fontSize: 14)),
+                                        const CircularProgressIndicator(color: Colors.white),
+                                        const SizedBox(height: 16),
+                                        Text(AppLocalizations.of(context).loadingVideo, style: const TextStyle(color: Colors.white, fontSize: 14)),
                                       ],
                                     ),
                                   ))
@@ -503,7 +784,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                     _closePreviewOverlay();
                                   },
                                   icon: const Icon(Icons.open_in_new),
-                                  label: const Text('Open'),
+                                  label: Text(AppLocalizations.of(context).open),
                                 ),
                               ],
                             ),
@@ -618,7 +899,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('ISSUE KEY', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84), letterSpacing: 0.5)),
+                  Text(AppLocalizations.of(context).issueKey, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84), letterSpacing: 0.5)),
                   const SizedBox(height: 4),
                   Text(_issue!.key, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF0052CC), letterSpacing: 0.3)),
                 ],
@@ -651,7 +932,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 children: [
                   const Text('📝', style: TextStyle(fontSize: 18)),
                   const SizedBox(width: 8),
-                  const Text('Summary', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+                  Text(AppLocalizations.of(context).summary, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
                   if (_issue!.fields.priority != null) ...[
                     const SizedBox(width: 8),
                     Text(_getPriorityEmoji(_issue!.fields.priority!.name), style: const TextStyle(fontSize: 16)),
@@ -661,7 +942,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               if (_canEdit)
                 TextButton(
                   onPressed: () => _openSummaryEdit(),
-                  child: const Text('Edit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0052CC))),
+                  child: Text(AppLocalizations.of(context).edit, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0052CC))),
                 ),
             ],
           ),
@@ -677,7 +958,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// IssueDetailsFields-style: card with icon+label rows (Assignee, Reporter, Priority, Type, Sprint, Story Points, Due Date).
   Widget _buildDetailsCard() {
-    final sprintDisplay = _formatSprint(_issue!.fields.sprint);
+    final sprintDisplay = _formatSprint(context, _issue!.fields.sprint);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
@@ -690,57 +971,57 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Text('📋', style: TextStyle(fontSize: 18)),
-              SizedBox(width: 8),
-              Text('Details', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+              const Text('📋', style: TextStyle(fontSize: 18)),
+              const SizedBox(width: 8),
+              Text(AppLocalizations.of(context).details, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
             ],
           ),
           const SizedBox(height: 16),
           _detailRowTap(
             icon: '👤',
-            label: 'Assignee',
-            value: _issue!.fields.assignee != null ? _userTile(_issue!.fields.assignee!, radius: 12) : const Text('Unassigned', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), fontStyle: FontStyle.italic)),
+            label: AppLocalizations.of(context).assignee,
+            value: _issue!.fields.assignee != null ? _userTile(_issue!.fields.assignee!, radius: 12) : Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: 15, color: Color(0xFF8993A4), fontStyle: FontStyle.italic)),
             onTap: _canEdit ? _openAssigneePicker : null,
           ),
           if (_issue!.fields.reporter != null)
             _detailRowStatic(
               icon: '📝',
-              label: 'Reporter',
+              label: AppLocalizations.of(context).reporter,
               value: _userTile(_issue!.fields.reporter!, radius: 12),
             ),
           _detailRowTap(
             icon: '⚡',
-            label: 'Priority',
+            label: AppLocalizations.of(context).priority,
             value: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(_getPriorityEmoji(_issue!.fields.priority?.name), style: const TextStyle(fontSize: 16)),
                 const SizedBox(width: 6),
-                Text(_issue!.fields.priority?.name ?? 'None', style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
+                Text(_issue!.fields.priority?.name ?? AppLocalizations.of(context).none, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
               ],
             ),
             onTap: _canEdit ? _openPriorityPicker : null,
           ),
-          _detailRowStatic(icon: '🏷️', label: 'Type', value: Text(_issue!.fields.issuetype.name, style: const TextStyle(fontSize: 14, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500))),
+          _detailRowStatic(icon: '🏷️', label: AppLocalizations.of(context).type, value: Text(_issue!.fields.issuetype.name, style: const TextStyle(fontSize: 14, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500))),
           _detailRowTap(
             icon: '🏃',
-            label: 'Sprint',
+            label: AppLocalizations.of(context).sprint,
             value: Text(sprintDisplay, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: _canEdit ? _openSprintPicker : null,
           ),
           _detailRowTap(
             icon: '🎯',
-            label: 'Story Points',
-            value: Text(_issue!.fields.customfield_10016?.toString() ?? 'Not set', style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
+            label: AppLocalizations.of(context).storyPoints,
+            value: Text(_issue!.fields.customfield_10016?.toString() ?? AppLocalizations.of(context).notSet, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
             onTap: _canEdit ? _openStoryPointsPicker : null,
           ),
           _detailRowTap(
             icon: '📅',
-            label: 'Due Date',
+            label: AppLocalizations.of(context).dueDate,
             value: Text(
-              _issue!.fields.duedate != null ? _formatDueDate(_issue!.fields.duedate!) : 'Not set',
+              _issue!.fields.duedate != null ? _formatDueDate(_issue!.fields.duedate!) : AppLocalizations.of(context).notSet,
               style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500),
             ),
             onTap: _canEdit ? _openDueDatePicker : null,
@@ -768,7 +1049,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Description', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+              Text(AppLocalizations.of(context).description, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
               if (_canEdit)
                 TextButton(
                   onPressed: _updatingDescription ? null : _openDescriptionEdit,
@@ -810,22 +1091,91 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       setState(() => _updatingDescription = false);
       if (err == null) {
         await _refreshIssue();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Description updated')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).descriptionUpdated)));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       }
     }
   }
 
-  String _formatSprint(dynamic sprint) {
-    if (sprint == null) return 'None';
-    if (sprint is List) {
-      if (sprint.isEmpty) return 'None';
-      final last = sprint is List<JiraSprintRef> ? sprint.last : (sprint as List).last;
-      return last is JiraSprintRef ? last.name : (last is Map ? (last['name']?.toString() ?? 'None') : 'None');
+  /// Extract sprint ID from dynamic sprint field (can be JiraSprintRef, List, or Map)
+  int? _getSprintId(dynamic sprint) {
+    if (sprint == null) return null;
+    if (sprint is JiraSprintRef) return sprint.id;
+    if (sprint is List && sprint.isNotEmpty) {
+      final last = sprint.last;
+      if (last is JiraSprintRef) return last.id;
+      if (last is Map) {
+        final id = last['id'];
+        if (id is int) return id;
+        if (id is String) return int.tryParse(id);
+      }
     }
-    if (sprint is JiraSprintRef) return sprint.name;
-    return sprint.toString();
+    if (sprint is Map) {
+      final id = sprint['id'];
+      if (id is int) return id;
+      if (id is String) return int.tryParse(id);
+    }
+    return null;
+  }
+
+  String _formatSprint(BuildContext context, dynamic sprint) {
+    final none = AppLocalizations.of(context).none;
+    if (sprint == null) return none;
+    
+    // Handle JiraSprintRef object
+    if (sprint is JiraSprintRef) {
+      return sprint.name.isNotEmpty ? sprint.name : none;
+    }
+    
+    // Handle List of sprints (take the last/most recent one)
+    if (sprint is List) {
+      if (sprint.isEmpty) return none;
+      final last = sprint.last;
+      if (last is JiraSprintRef) {
+        return last.name.isNotEmpty ? last.name : none;
+      }
+      if (last is Map) {
+        // Try to extract name from Map
+        final name = last['name']?.toString() ?? 
+                    last['sprintName']?.toString() ??
+                    last['displayName']?.toString();
+        if (name != null && name.isNotEmpty) {
+          return name;
+        }
+        // If no name, try to create JiraSprintRef from Map
+        try {
+          final sprintRef = JiraSprintRef.fromJson(last as Map<String, dynamic>);
+          return sprintRef.name.isNotEmpty ? sprintRef.name : none;
+        } catch (e) {
+          // If parsing fails, return none
+          return none;
+        }
+      }
+    }
+    
+    // Handle raw Map object from API
+    if (sprint is Map) {
+      // Try to extract name directly
+      final name = sprint['name']?.toString() ?? 
+                  sprint['sprintName']?.toString() ??
+                  sprint['displayName']?.toString();
+      if (name != null && name.isNotEmpty) {
+        return name;
+      }
+      // Try to parse as JiraSprintRef
+      try {
+        final sprintRef = JiraSprintRef.fromJson(sprint as Map<String, dynamic>);
+        return sprintRef.name.isNotEmpty ? sprintRef.name : none;
+      } catch (e) {
+        // If parsing fails, return none
+        return none;
+      }
+    }
+    
+    // Last resort: convert to string
+    final str = sprint.toString();
+    return str.isNotEmpty && str != 'null' ? str : none;
   }
 
   String _formatDueDate(String iso) {
@@ -852,7 +1202,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 children: [
                   Text(icon, style: const TextStyle(fontSize: 16)),
                   const SizedBox(width: 8),
-                  Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84))),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -890,7 +1246,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               children: [
                 Text(icon, style: const TextStyle(fontSize: 16)),
                 const SizedBox(width: 8),
-                Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84))),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84)),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ],
             ),
           ),
@@ -917,7 +1279,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Summary'),
+        title: Text(AppLocalizations.of(context).editSummary),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(border: OutlineInputBorder()),
@@ -925,10 +1287,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(AppLocalizations.of(context).cancel)),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Save'),
+            child: Text(AppLocalizations.of(context).save),
           ),
         ],
       ),
@@ -938,7 +1300,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     if (mounted) {
       if (err == null) {
         await _refreshIssue();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Summary updated')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).summaryUpdated)));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
       }
@@ -990,8 +1352,72 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     setState(() => _showDueDatePicker = true);
   }
 
-  void _openSprintPicker() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sprint picker coming soon')));
+  void _openSprintPicker() async {
+    final issue = _issue;
+    if (issue == null) return;
+    // Use project from fields, or derive from issue key (e.g. PROJ-123 -> PROJ)
+    String? projectKey = issue.fields.projectKey;
+    if (projectKey == null || projectKey.isEmpty) {
+      final keyParts = issue.key.split('-');
+      if (keyParts.isNotEmpty && keyParts.first.isNotEmpty) {
+        projectKey = keyParts.first;
+      }
+    }
+    if (projectKey == null || projectKey.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).sprintPickerNoProject)));
+      return;
+    }
+    setState(() {
+      _showSprintPicker = true;
+      _loadingSprints = true;
+      _sprints = [];
+      _boardIdForSprint = null;
+    });
+    try {
+      final api = context.read<JiraApiService>();
+      final res = await api.getBoards(projectKeyOrId: projectKey, maxResults: 10);
+      final boards = res.boards;
+      if (!mounted) return;
+      if (boards.isEmpty) {
+        setState(() { _showSprintPicker = false; _loadingSprints = false; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).sprintPickerNoBoard)));
+        return;
+      }
+      final board = boards.firstWhere((b) => b.type.toLowerCase() == 'scrum', orElse: () => boards.first);
+      final allSprints = await api.getSprintsForBoard(board.id);
+      
+      // Get current sprint ID from issue (if any)
+      final currentSprintId = _getSprintId(issue.fields.sprint);
+      
+      // Filter to show active and future sprints, plus the current sprint (even if closed)
+      final filteredSprints = allSprints.where((s) {
+        if (s.state == 'active' || s.state == 'future') return true;
+        if (currentSprintId != null && s.id == currentSprintId) return true; // Include current sprint even if closed
+        return false;
+      }).toList();
+      
+      // Sort: current sprint first, then active, then future
+      filteredSprints.sort((a, b) {
+        if (currentSprintId != null) {
+          if (a.id == currentSprintId) return -1;
+          if (b.id == currentSprintId) return 1;
+        }
+        if (a.state == 'active' && b.state != 'active') return -1;
+        if (b.state == 'active' && a.state != 'active') return 1;
+        return 0;
+      });
+      
+      if (!mounted) return;
+      setState(() {
+        _boardIdForSprint = board.id;
+        _sprints = filteredSprints;
+        _loadingSprints = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _showSprintPicker = false; _loadingSprints = false; });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> _refreshIssue() async {
@@ -1002,7 +1428,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Widget _buildAssigneePickerModal() {
     return _modalSheet(
-      title: 'Assignee',
+      title: AppLocalizations.of(context).assignee,
       onClose: () {
         _assigneeSearchController.clear();
         _assigneeSearchTimer?.cancel();
@@ -1015,11 +1441,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: TextField(
               controller: _assigneeSearchController,
-              decoration: const InputDecoration(
-                hintText: 'Search assignee...',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                hintText: AppLocalizations.of(context).searchAssignee,
+                border: const OutlineInputBorder(),
                 isDense: true,
-                prefixIcon: Icon(Icons.search, size: 20),
+                prefixIcon: const Icon(Icons.search, size: 20),
               ),
               onChanged: _debouncedAssigneeSearch,
             ),
@@ -1028,7 +1454,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))))
           else ...[
             ListTile(
-              title: const Text('Unassigned', style: TextStyle(fontStyle: FontStyle.italic)),
+              title: Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontStyle: FontStyle.italic)),
               onTap: () async {
                 setState(() => _updatingAssignee = 'unassign');
                 final err = await context.read<JiraApiService>().updateIssueField(widget.issueKey, {'assignee': null});
@@ -1036,7 +1462,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   setState(() { _updatingAssignee = null; _showAssigneePicker = false; });
                   if (err == null) {
                     await _refreshIssue();
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assignee cleared')));
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).assigneeCleared)));
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
                   }
@@ -1058,7 +1484,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     setState(() { _updatingAssignee = null; _showAssigneePicker = false; });
                     if (err == null) {
                       await _refreshIssue();
-                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assignee updated')));
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).assigneeUpdated)));
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
                     }
@@ -1070,6 +1496,67 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildSprintPickerModal() {
+    return _modalSheet(
+      title: AppLocalizations.of(context).sprint,
+      onClose: () => setState(() => _showSprintPicker = false),
+      child: _loadingSprints
+          ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          : ListView(
+              shrinkWrap: true,
+              children: [
+                ListTile(
+                  leading: const Text('📋', style: TextStyle(fontSize: 20)),
+                  title: Text(AppLocalizations.of(context).backlog),
+                  trailing: _updatingSprintToBacklog ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                  onTap: _boardIdForSprint == null
+                      ? null
+                      : () async {
+                          setState(() { _updatingSprint = true; _updatingSprintToBacklog = true; });
+                          final err = await context.read<JiraApiService>().moveIssueToBacklog(widget.issueKey, _boardIdForSprint!);
+                          if (mounted) {
+                            setState(() { _updatingSprint = false; _updatingSprintToBacklog = false; _updatingSprintId = null; _showSprintPicker = false; });
+                            if (err == null) {
+                              await _refreshIssue();
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).movedToBacklog)));
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+                            }
+                          }
+                        },
+                ),
+                ..._sprints.map((s) {
+                  // Check if this sprint is the current sprint for the issue
+                  final currentSprintId = _getSprintId(_issue?.fields.sprint);
+                  final isCurrent = currentSprintId != null && currentSprintId == s.id;
+                  return ListTile(
+                    leading: Text(s.state == 'active' ? '🏃' : '📅', style: const TextStyle(fontSize: 20)),
+                    title: Text(s.name),
+                    subtitle: Text(s.state.toUpperCase(), style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84))),
+                    selected: isCurrent,
+                    trailing: _updatingSprintId == s.id ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                    onTap: isCurrent
+                        ? null
+                        : () async {
+                            setState(() { _updatingSprint = true; _updatingSprintId = s.id; });
+                            final err = await context.read<JiraApiService>().moveIssueToSprint(widget.issueKey, s.id);
+                            if (mounted) {
+                              setState(() { _updatingSprint = false; _updatingSprintId = null; _showSprintPicker = false; });
+                              if (err == null) {
+                                await _refreshIssue();
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).sprintUpdated)));
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+                              }
+                            }
+                          },
+                  );
+                }),
+              ],
+            ),
     );
   }
 
@@ -1204,7 +1691,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Widget _buildDueDateModal() {
     return _modalSheet(
-      title: 'Due Date',
+      title: AppLocalizations.of(context).dueDate,
       onClose: () => setState(() => _showDueDatePicker = false),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1502,7 +1989,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       );
     }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: _subtasks.map((issue) {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -1518,30 +2005,36 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFDFE1E6)),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _statusColor(issue.fields.status.statusCategory.key),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        issue.fields.status.name,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _statusColor(issue.fields.status.statusCategory.key),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            issue.fields.status.name,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                        ),
+                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13)),
-                          Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                    const SizedBox(height: 6),
+                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (issue.fields.assignee != null) ...[
+                      const SizedBox(height: 8),
+                      _userTile(issue.fields.assignee!, radius: 10),
+                    ],
                   ],
                 ),
               ),
@@ -1551,6 +2044,495 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       }).toList(),
     );
   }
+
+  /// Epic children section: list issues in this Epic (when issue type is Epic). JQL parentEpic = key.
+  Widget _buildEpicChildrenSection() {
+    if (_loadingEpicChildren) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+      );
+    }
+    if (_epicChildren.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(AppLocalizations.of(context).noIssuesInThisEpic, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _epicChildren.map((issue) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: () => _navigateToIssue(issue.key),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _statusColor(issue.fields.status.statusCategory.key),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            issue.fields.status.name,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                        ),
+                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (issue.fields.assignee != null) ...[
+                      const SizedBox(height: 8),
+                      _userTile(issue.fields.assignee!, radius: 10),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Linked work items section: list issue links from _issue.fields.issuelinks (Jira API).
+  Widget _buildLinkedWorkItemsSection() {
+    final links = _issue?.fields.issuelinks ?? [];
+    if (links.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: links.map((link) {
+        final issue = link.linkedIssue;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: () => _navigateToIssue(issue.key),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEBECF0),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            link.directionLabel,
+                            style: const TextStyle(fontSize: 11, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                        ),
+                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _statusColor(issue.fields.status.statusCategory.key),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            issue.fields.status.name,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (issue.fields.assignee != null) ...[
+                          const SizedBox(width: 8),
+                          _userTile(issue.fields.assignee!, radius: 10),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Confluence section: list remote links that are Confluence pages (Jira API) and allow adding/linking.
+  Widget _buildConfluenceSection() {
+    if (_loadingConfluenceLinks) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_confluenceLinks.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(AppLocalizations.of(context).noConfluencePagesLinked, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+          )
+        else
+          ..._confluenceLinks.map((link) {
+            final isDeleting = _deletingConfluenceLinkId == link.id;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: link.url.isNotEmpty && !isDeleting
+                      ? () => url_launcher.launchUrl(Uri.parse(link.url), mode: url_launcher.LaunchMode.externalApplication)
+                      : null,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFDFE1E6)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.article_outlined, color: Color(0xFF0052CC), size: 22),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(link.title.isNotEmpty ? link.title : 'Confluence Page', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF172B4D), fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  if (link.url.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(link.url, style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (!isDeleting && link.url.isNotEmpty)
+                              TextButton.icon(
+                                icon: const Icon(Icons.open_in_new, size: 18, color: Color(0xFF0052CC)),
+                                label: Text(AppLocalizations.of(context).openExternally, style: const TextStyle(fontSize: 13)),
+                                onPressed: () => url_launcher.launchUrl(Uri.parse(link.url), mode: url_launcher.LaunchMode.externalApplication),
+                              ),
+                            TextButton.icon(
+                              icon: isDeleting
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))
+                                  : const Icon(Icons.link_off, size: 18, color: Color(0xFF5E6C84)),
+                              label: Text(
+                                AppLocalizations.of(context).removeConfluenceLink,
+                                style: const TextStyle(fontSize: 13, color: Color(0xFF5E6C84)),
+                              ),
+                              onPressed: isDeleting ? null : () => _confirmRemoveConfluenceLink(link.id),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _showAddConfluenceDialog(context),
+            icon: const Icon(Icons.add_link, size: 18),
+            label: Text(AppLocalizations.of(context).linkConfluencePage),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showAddConfluenceDialog(BuildContext context) async {
+    final urlController = TextEditingController();
+    final titleController = TextEditingController();
+    final screenContext = context;
+    final added = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(AppLocalizations.of(ctx).linkConfluencePage, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: urlController,
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(ctx).confluencePageUrl,
+                    hintText: AppLocalizations.of(ctx).confluencePageUrlHint,
+                    border: const OutlineInputBorder(),
+                  ),
+                  maxLines: 1,
+                  autofocus: true,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: titleController,
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(ctx).confluencePageTitleOptional,
+                    border: const OutlineInputBorder(),
+                  ),
+                  maxLines: 1,
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: Text(AppLocalizations.of(ctx).cancel),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () async {
+                        final url = urlController.text.trim();
+                        if (url.isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter the Confluence page URL')));
+                          return;
+                        }
+                        final api = screenContext.read<JiraApiService>();
+                        final err = await api.createConfluenceRemoteLink(
+                          widget.issueKey,
+                          pageUrl: url,
+                          title: titleController.text.trim(),
+                        );
+                        if (!ctx.mounted) return;
+                        if (err != null) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(AppLocalizations.of(ctx).confluenceLinkFailed(err))));
+                        } else {
+                          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(AppLocalizations.of(ctx).confluenceLinkAdded)));
+                          Navigator.of(ctx).pop(true);
+                        }
+                      },
+                      child: Text(AppLocalizations.of(ctx).save),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (added == true && mounted) _loadConfluenceLinks();
+  }
+
+  Future<void> _confirmRemoveConfluenceLink(int linkId) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(AppLocalizations.of(ctx).removeConfluenceLink),
+        content: Text(AppLocalizations.of(ctx).removeConfluenceLinkConfirm),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(AppLocalizations.of(ctx).cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            child: Text(AppLocalizations.of(ctx).delete),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    _deleteConfluenceLink(linkId);
+  }
+
+  Future<void> _deleteConfluenceLink(int linkId) async {
+    setState(() => _deletingConfluenceLinkId = linkId);
+    final api = context.read<JiraApiService>();
+    final err = await api.deleteRemoteLink(widget.issueKey, linkId);
+    if (!mounted) return;
+    setState(() => _deletingConfluenceLinkId = null);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).confluenceLinkRemoveFailed(err))));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).confluenceLinkRemoved)));
+      _loadConfluenceLinks();
+    }
+  }
+
+  /// Detect "@" mentions in comment text and show user suggestions
+  void _onCommentTextChanged() {
+    final text = _newCommentController.text;
+    final selection = _newCommentController.selection;
+    final cursorPosition = selection.baseOffset;
+    
+    if (cursorPosition < 0 || cursorPosition > text.length) {
+      _removeMentionOverlay();
+      setState(() => _showMentionSuggestions = false);
+      return;
+    }
+    
+    // Find "@" symbol before cursor
+    int atIndex = -1;
+    for (int i = cursorPosition - 1; i >= 0; i--) {
+      if (text[i] == '@') {
+        // Check if there's a space or newline before @ (start of mention)
+        if (i == 0 || text[i - 1] == ' ' || text[i - 1] == '\n') {
+          atIndex = i;
+          break;
+        }
+      } else if (text[i] == ' ' || text[i] == '\n') {
+        // Stop if we hit a space/newline before finding @
+        break;
+      }
+    }
+    
+    if (atIndex >= 0) {
+      // Extract query after "@"
+      final query = text.substring(atIndex + 1, cursorPosition);
+      _mentionStartPosition = atIndex;
+      
+      // Only show suggestions if query doesn't contain spaces or newlines
+      if (!query.contains(' ') && !query.contains('\n')) {
+        // Search for users
+        _searchMentionUsers(query.trim());
+      } else {
+        // Query contains space/newline, hide suggestions
+        _removeMentionOverlay();
+        setState(() => _showMentionSuggestions = false);
+      }
+    } else {
+      _removeMentionOverlay();
+      setState(() {
+        _showMentionSuggestions = false;
+        _mentionStartPosition = -1;
+      });
+    }
+  }
+
+  /// Search for users to mention (debounced)
+  void _searchMentionUsers(String query) {
+    _mentionSearchTimer?.cancel();
+    _mentionSearchTimer = Timer(const Duration(milliseconds: 300), () async {
+      if (!mounted) return;
+      setState(() => _loadingMentions = true);
+      try {
+        final api = context.read<JiraApiService>();
+        final users = await api.getAssignableUsers(widget.issueKey, query: query.isEmpty ? null : query);
+        if (mounted) {
+          setState(() {
+            _mentionSuggestions = users;
+            _showMentionSuggestions = users.isNotEmpty;
+            _loadingMentions = false;
+          });
+          if (users.isNotEmpty) _showMentionOverlay();
+        }
+      } catch (e) {
+        if (mounted) {
+          _removeMentionOverlay();
+          setState(() {
+            _mentionSuggestions = [];
+            _showMentionSuggestions = false;
+            _loadingMentions = false;
+          });
+        }
+      }
+    });
+  }
+
+  /// Insert mention into comment text
+  void _insertMention(JiraUser user) {
+    if (_mentionStartPosition < 0) return;
+    
+    final text = _newCommentController.text;
+    final cursorPosition = _newCommentController.selection.baseOffset;
+    
+    // Find end of mention query (space or end of text)
+    int endPosition = cursorPosition;
+    for (int i = cursorPosition; i < text.length; i++) {
+      if (text[i] == ' ' || text[i] == '\n') {
+        endPosition = i;
+        break;
+      }
+    }
+    if (endPosition == cursorPosition && cursorPosition < text.length) {
+      endPosition = text.length;
+    }
+    
+    // Insert display name for the user to see, with invisible marker (accountId + displayName) for ADF when posting
+    final before = text.substring(0, _mentionStartPosition);
+    final after = text.substring(endPosition);
+    const zwsp = '\u200B';
+    const sep = '\u200C'; // zero-width non-joiner: separates accountId from displayName in marker
+    final mentionText = '@${user.displayName}$zwsp~$zwsp${user.accountId}$sep${user.displayName}$zwsp~$zwsp';
+    
+    final newText = before + mentionText + (after.isEmpty ? ' ' : after);
+    _newCommentController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: _mentionStartPosition + mentionText.length + (after.isEmpty ? 1 : 0),
+      ),
+    );
+    
+    _hideMentionOverlay();
+  }
+
 
   Future<void> _onAddComment() async {
     final text = _newCommentController.text.trim();
@@ -1565,7 +2547,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to add comment: $err')));
         } else {
           _newCommentController.clear();
-          setState(() => _replyToCommentId = null);
+          _removeMentionOverlay();
+          setState(() {
+            _replyToCommentId = null;
+            _showMentionSuggestions = false;
+            _mentionStartPosition = -1;
+          });
           await _load();
         }
       }
@@ -1751,7 +2738,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           FilledButton(
             onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
+            child: Text(AppLocalizations.of(context).save),
           ),
         ],
       ),
@@ -1927,12 +2914,20 @@ class _CommentBodyWidget extends StatelessWidget {
     final id = attrs['id']?.toString();
     final url = attrs['url'] as String?;
     final alt = attrs['alt'] as String?;
-    if (id != null) {
+    if (id != null && id.isNotEmpty) {
       final found = attachments.cast<JiraAttachment?>().firstWhere(
         (a) => a?.id == id,
         orElse: () => null,
       );
       if (found != null) return found;
+    }
+    // Fallback: match by filename (alt) when id not found or comment ADF uses alt only
+    if (alt != null && alt.isNotEmpty) {
+      for (final a in attachments) {
+        if (a.filename == alt || (a.filename.isNotEmpty && a.filename.contains(alt))) {
+          return a;
+        }
+      }
     }
     if (url != null && url.isNotEmpty && (alt != null || id != null)) {
       return JiraAttachment(id: id ?? 'inline', filename: alt ?? 'Attachment', mimeType: 'application/octet-stream', content: url);
@@ -2059,25 +3054,41 @@ class _CommentBodyWidget extends StatelessWidget {
               } else if (itemType == 'mediaInline') {
                 final att = _resolveAttachment(item, attachments);
                 if (att != null) {
-                  row.add(Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: InkWell(
-                      onTap: () => onAttachmentPress(att),
-                      borderRadius: BorderRadius.circular(4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(color: const Color(0xFFF4F5F7), borderRadius: BorderRadius.circular(4)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 16)),
-                            const SizedBox(width: 4),
-                            Text(att.filename, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-                          ],
+                  // Inline preview: image as small thumbnail, other files as icon + name
+                  final isImage = att.mimeType.startsWith('image/');
+                  final bytes = loadedImageBytes ?? {};
+                  final onLoad = onNeedLoadImage;
+                  if (isImage && onLoad != null) {
+                    row.add(Padding(
+                      padding: const EdgeInsets.only(right: 8, bottom: 4),
+                      child: _InlineCommentThumbnail(
+                        attachment: att,
+                        loadedBytes: bytes[att.id],
+                        onNeedLoad: onLoad,
+                        onTap: () => onAttachmentPress(att),
+                      ),
+                    ));
+                  } else {
+                    row.add(Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: InkWell(
+                        onTap: () => onAttachmentPress(att),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: const Color(0xFFF4F5F7), borderRadius: BorderRadius.circular(4)),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 16)),
+                              const SizedBox(width: 4),
+                              Text(att.filename, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ));
+                    ));
+                  }
                 }
               }
             }
@@ -2104,8 +3115,11 @@ class _CommentBodyWidget extends StatelessWidget {
         } else if (type == 'mediaSingle' && node['content'] is List) {
           final bytes = loadedImageBytes ?? {};
           final onLoad = onNeedLoadImage;
-          for (final media in node['content'] as List) {
-            final att = _resolveAttachment(media, attachments);
+          final contentList = node['content'] as List;
+          // ADF: content may contain { type: 'media', attrs: { id, ... } }
+          for (final media in contentList) {
+            final mediaNode = media is Map && media['type'] == 'media' ? media : media;
+            final att = _resolveAttachment(mediaNode, attachments);
             if (att != null) {
               if (onLoad != null && att.mimeType.startsWith('image/')) {
                 children.add(Padding(
@@ -2156,8 +3170,10 @@ class _CommentBodyWidget extends StatelessWidget {
           final bytes = loadedImageBytes ?? {};
           final onLoad = onNeedLoadImage;
           final group = <Widget>[];
-          for (final media in node['content'] as List) {
-            final att = _resolveAttachment(media, attachments);
+          final contentList = node['content'] as List;
+          for (final media in contentList) {
+            final mediaNode = media is Map && media['type'] == 'media' ? media : media;
+            final att = _resolveAttachment(mediaNode, attachments);
             if (att != null) {
               if (onLoad != null && att.mimeType.startsWith('image/')) {
                 group.add(Padding(
@@ -2337,7 +3353,7 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
                                 setState(() => _previewAttachment = null);
                               },
                               icon: const Icon(Icons.open_in_new),
-                              label: const Text('Open'),
+                              label: Text(AppLocalizations.of(context).open),
                             ),
                           ],
                         ),
@@ -2369,7 +3385,7 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
         actions: [
           TextButton(
             onPressed: _save,
-            child: const Text('Save'),
+            child: Text(AppLocalizations.of(context).save),
           ),
         ],
       ),
@@ -2740,6 +3756,79 @@ class _DescriptionBodyWidget extends StatelessWidget {
       return _LinkableText(plain, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children);
+  }
+}
+
+/// Small inline image thumbnail in comments (e.g. mediaInline); loads on demand, tap opens full preview.
+class _InlineCommentThumbnail extends StatefulWidget {
+  final JiraAttachment attachment;
+  final Uint8List? loadedBytes;
+  final void Function(JiraAttachment) onNeedLoad;
+  final VoidCallback onTap;
+
+  const _InlineCommentThumbnail({
+    required this.attachment,
+    required this.loadedBytes,
+    required this.onNeedLoad,
+    required this.onTap,
+  });
+
+  @override
+  State<_InlineCommentThumbnail> createState() => _InlineCommentThumbnailState();
+}
+
+class _InlineCommentThumbnailState extends State<_InlineCommentThumbnail> {
+  bool _loadStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.loadedBytes == null && !_loadStarted) {
+      _loadStarted = true;
+      widget.onNeedLoad(widget.attachment);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlineCommentThumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.loadedBytes == null && !_loadStarted) {
+      _loadStarted = true;
+      widget.onNeedLoad(widget.attachment);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 72.0;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F5F7),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFDFE1E6)),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: widget.loadedBytes != null
+                ? Image.memory(widget.loadedBytes!, fit: BoxFit.cover)
+                : const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)),
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

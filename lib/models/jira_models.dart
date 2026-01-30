@@ -145,10 +145,16 @@ class JiraIssueFields {
   final String updated;
   final String? duedate;
   final int? customfield_10016; // Story points
-  final JiraSprintRef? sprint;
+  final dynamic sprint; // Can be JiraSprintRef, List<JiraSprintRef>, or null
   final JiraIssueParent? parent;
+  /// Project key (e.g. PROJ) for loading boards/sprints when updating sprint on issue detail.
+  final String? projectKey;
   /// Nullable for backward compatibility with cached/older parsed issues that may lack this field.
   final List<JiraAttachment>? attachment;
+  /// Child issues (subtasks) when returned by GET issue with fields=subtasks.
+  final List<JiraIssue>? subtasks;
+  /// Linked work items (issue links) when returned by GET issue with fields=issuelinks.
+  final List<JiraIssueLink>? issuelinks;
 
   JiraIssueFields({
     required this.summary,
@@ -164,7 +170,10 @@ class JiraIssueFields {
     this.customfield_10016,
     this.sprint,
     this.parent,
+    this.projectKey,
     this.attachment = const [],
+    this.subtasks,
+    this.issuelinks,
   });
 
   factory JiraIssueFields.fromJson(Map<String, dynamic> json) {
@@ -190,20 +199,77 @@ class JiraIssueFields {
       updated: stringFromJson(json['updated']) ?? '',
       duedate: stringFromJson(json['duedate']),
       customfield_10016: intFromJson(json['customfield_10016']),
-      sprint: _parseSprint(json['sprint']),
+      sprint: json['sprint'] ?? json['customfield_10020'], // Store raw sprint data (can be object or list)
       parent: json['parent'] != null
           ? JiraIssueParent.fromJson(json['parent'] as Map<String, dynamic>)
           : null,
+      projectKey: json['project'] != null && json['project'] is Map
+          ? stringFromJson((json['project'] as Map)['key'])
+          : null,
       attachment: JiraAttachment.fromJsonList(json['attachment']),
+      subtasks: _parseSubtasks(json['subtasks']),
+      issuelinks: JiraIssueLink.fromJsonList(json['issuelinks'] ?? json['issueLinks']),
     );
+  }
+
+  static List<JiraIssue>? _parseSubtasks(dynamic v) {
+    if (v == null) return null;
+    if (v is! List) return null;
+    final list = <JiraIssue>[];
+    for (final e in v) {
+      if (e is Map<String, dynamic>) {
+        try {
+          list.add(JiraIssue.fromJson(e));
+        } catch (_) {
+          // Skip malformed subtask
+        }
+      }
+    }
+    return list.isEmpty ? null : list;
   }
 
   static JiraSprintRef? _parseSprint(dynamic v) {
     if (v == null) return null;
-    if (v is Map<String, dynamic>) return JiraSprintRef.fromJson(v);
-    if (v is List && v.isNotEmpty && v.first is Map<String, dynamic>) {
-      return JiraSprintRef.fromJson(v.first as Map<String, dynamic>);
+    
+    // Handle single sprint object
+    if (v is Map<String, dynamic>) {
+      try {
+        return JiraSprintRef.fromJson(v);
+      } catch (e) {
+        // If parsing fails, try to extract basic fields
+        final id = intFromJson(v['id']);
+        final name = stringFromJson(v['name']);
+        if (id != null && name != null) {
+          return JiraSprintRef(
+            id: id,
+            name: name,
+            state: stringFromJson(v['state']) ?? 'unknown',
+          );
+        }
+      }
     }
+    
+    // Handle list of sprints (take the last/most recent one)
+    if (v is List && v.isNotEmpty) {
+      final last = v.last;
+      if (last is Map<String, dynamic>) {
+        try {
+          return JiraSprintRef.fromJson(last);
+        } catch (e) {
+          // Fallback parsing
+          final id = intFromJson(last['id']);
+          final name = stringFromJson(last['name']);
+          if (id != null && name != null) {
+            return JiraSprintRef(
+              id: id,
+              name: name,
+              state: stringFromJson(last['state']) ?? 'unknown',
+            );
+          }
+        }
+      }
+    }
+    
     return null;
   }
 }
@@ -273,9 +339,13 @@ class JiraUser {
     if (av is Map) {
       urls = av.map((k, v) => MapEntry(k.toString(), v.toString()));
     }
+    // Jira Cloud uses displayName; Jira Server may use name
+    final displayName = stringFromJson(json['displayName']) ??
+        stringFromJson(json['name']) ??
+        '';
     return JiraUser(
       accountId: stringFromJson(json['accountId']) ?? '',
-      displayName: stringFromJson(json['displayName']) ?? '',
+      displayName: displayName,
       emailAddress: stringFromJson(json['emailAddress']),
       avatarUrls: urls,
     );
@@ -363,4 +433,92 @@ class BoardAssignee {
   final String name;
 
   BoardAssignee({required this.key, required this.name});
+}
+
+/// Issue link (linked work item) from Jira API. GET issue with fields=issuelinks.
+class JiraIssueLink {
+  final String linkTypeName;
+  /// Direction label from type (e.g. "is blocked by", "blocks").
+  final String directionLabel;
+  final JiraIssue linkedIssue;
+
+  JiraIssueLink({
+    required this.linkTypeName,
+    required this.directionLabel,
+    required this.linkedIssue,
+  });
+
+  factory JiraIssueLink.fromJson(Map<String, dynamic> json) {
+    final type = json['type'] as Map<String, dynamic>?;
+    final typeName = type != null ? (stringFromJson(type['name']) ?? '') : '';
+    final inward = type != null ? (stringFromJson(type['inward']) ?? '') : '';
+    final outward = type != null ? (stringFromJson(type['outward']) ?? '') : '';
+    JiraIssue issue;
+    String directionLabel;
+    if (json['inwardIssue'] != null) {
+      issue = JiraIssue.fromJson(json['inwardIssue'] as Map<String, dynamic>);
+      directionLabel = inward;
+    } else if (json['outwardIssue'] != null) {
+      issue = JiraIssue.fromJson(json['outwardIssue'] as Map<String, dynamic>);
+      directionLabel = outward;
+    } else {
+      throw ArgumentError('Issue link must have inwardIssue or outwardIssue');
+    }
+    return JiraIssueLink(linkTypeName: typeName, directionLabel: directionLabel, linkedIssue: issue);
+  }
+
+  static List<JiraIssueLink>? fromJsonList(dynamic v) {
+    if (v == null) return null;
+    if (v is! List) return null;
+    final list = <JiraIssueLink>[];
+    for (final e in v) {
+      if (e is Map<String, dynamic>) {
+        try {
+          list.add(JiraIssueLink.fromJson(e));
+        } catch (_) {}
+      }
+    }
+    return list.isEmpty ? null : list;
+  }
+}
+
+/// Remote issue link from Jira API (e.g. Confluence page link). GET/POST /rest/api/3/issue/{key}/remotelink.
+class JiraRemoteLink {
+  final int id;
+  final String? globalId;
+  final String? applicationType;
+  final String? applicationName;
+  final String title;
+  final String url;
+  final String? relationship;
+
+  JiraRemoteLink({
+    required this.id,
+    this.globalId,
+    this.applicationType,
+    this.applicationName,
+    required this.title,
+    required this.url,
+    this.relationship,
+  });
+
+  factory JiraRemoteLink.fromJson(Map<String, dynamic> json) {
+    final obj = json['object'] as Map<String, dynamic>?;
+    final app = json['application'] as Map<String, dynamic>?;
+    return JiraRemoteLink(
+      id: intFromJson(json['id']) ?? 0,
+      globalId: stringFromJson(json['globalId']),
+      applicationType: app != null ? stringFromJson(app['type']) : null,
+      applicationName: app != null ? stringFromJson(app['name']) : null,
+      title: obj != null ? (stringFromJson(obj['title']) ?? '') : '',
+      url: obj != null ? (stringFromJson(obj['url']) ?? '') : '',
+      relationship: stringFromJson(json['relationship']),
+    );
+  }
+
+  /// True if this link is a Confluence wiki page (shown in Confluence section).
+  bool get isConfluence =>
+      applicationType != null &&
+      (applicationType!.toLowerCase().contains('confluence') ||
+          relationship == 'Wiki Page');
 }

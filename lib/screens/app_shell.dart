@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/jira_models.dart';
 import '../services/storage_service.dart';
 import '../services/jira_api_service.dart';
+import '../l10n/app_localizations.dart';
 import 'setup_screen.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 
-/// Root shell: checks config on start, shows Setup / Home / Settings.
+/// Root shell: checks config on start (or uses initial from Splash), shows Setup / Home / Settings.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key});
+  const AppShell({
+    super.key,
+    this.initialLoading,
+    this.initialShowSetup,
+  });
+
+  /// If set, skip loading and use [initialShowSetup] to show Setup vs Home.
+  final bool? initialLoading;
+  final bool? initialShowSetup;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -22,6 +30,13 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialLoading != null && widget.initialShowSetup != null) {
+      setState(() {
+        _loading = false;
+        _showSetup = widget.initialShowSetup!;
+      });
+      return;
+    }
     _checkConfiguration();
   }
 
@@ -45,23 +60,28 @@ class _AppShellState extends State<AppShell> {
     setState(() { _showSetup = false; });
   }
 
-  void _onLogout() {
+  Future<void> _onLogout() async {
+    try {
+      await context.read<StorageService>().clearConfig();
+    } catch (_) {}
     context.read<JiraApiService>().reset();
-    setState(() { _showSetup = true; });
+    if (mounted) setState(() { _showSetup = true; });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF5F5F5),
+      return Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(color: Color(0xFF0052CC)),
-              SizedBox(height: 16),
-              Text('Loading...', style: TextStyle(color: Color(0xFF666666), fontSize: 16)),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                AppLocalizations.of(context).loading,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Theme.of(context).colorScheme.outline),
+              ),
             ],
           ),
         ),
@@ -77,13 +97,11 @@ class _AppShellState extends State<AppShell> {
         MaterialPageRoute<void>(
           builder: (context) => SettingsScreen(
             onBack: () => Navigator.of(context).pop(),
-            onLogout: () {
-              Navigator.of(context).pop();
-              _onLogout();
-            },
+            onLogout: _onLogout,
           ),
         ),
       ),
+      onLogout: _onLogout,
     );
   }
 }

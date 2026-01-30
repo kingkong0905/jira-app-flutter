@@ -12,6 +12,7 @@ class StorageService {
   static const _apiToken = 'jira_api_token';
   static const _isConfigured = 'jira_is_configured';
   static const _defaultBoardId = 'jira_default_board_id';
+  static const _locale = 'app_locale';
 
   Database? _db;
   Future<void>? _initFuture;
@@ -93,5 +94,13 @@ class StorageService {
 
   Future<void> clearDefaultBoard() async {
     await _delete(_defaultBoardId);
+  }
+
+  Future<void> setLocale(String languageCode) async {
+    await _set(_locale, languageCode);
+  }
+
+  Future<String?> getLocale() async {
+    return _get(_locale);
   }
 }
