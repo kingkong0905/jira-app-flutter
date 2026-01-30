@@ -145,7 +145,8 @@ class JiraIssueFields {
   final String updated;
   final String? duedate;
   final int? customfield_10016; // Story points
-  final dynamic sprint; // Can be JiraSprintRef, List<JiraSprintRef>, or null
+  final dynamic _sprintRaw; // Raw from API (Map, List, or null) – use [sprint] getter for JiraSprintRef?
+  JiraSprintRef? get sprint => _parseSprint(_sprintRaw); // Normalize on read so cached/API Map is always safe
   final JiraIssueParent? parent;
   /// Project key (e.g. PROJ) for loading boards/sprints when updating sprint on issue detail.
   final String? projectKey;
@@ -168,13 +169,13 @@ class JiraIssueFields {
     required this.updated,
     this.duedate,
     this.customfield_10016,
-    this.sprint,
+    dynamic sprintRaw,
     this.parent,
     this.projectKey,
     this.attachment = const [],
     this.subtasks,
     this.issuelinks,
-  });
+  }) : _sprintRaw = sprintRaw;
 
   factory JiraIssueFields.fromJson(Map<String, dynamic> json) {
     return JiraIssueFields(
@@ -199,7 +200,7 @@ class JiraIssueFields {
       updated: stringFromJson(json['updated']) ?? '',
       duedate: stringFromJson(json['duedate']),
       customfield_10016: intFromJson(json['customfield_10016']),
-      sprint: json['sprint'] ?? json['customfield_10020'], // Store raw sprint data (can be object or list)
+      sprintRaw: json['sprint'] ?? json['customfield_10020'],
       parent: json['parent'] != null
           ? JiraIssueParent.fromJson(json['parent'] as Map<String, dynamic>)
           : null,
@@ -230,16 +231,18 @@ class JiraIssueFields {
 
   static JiraSprintRef? _parseSprint(dynamic v) {
     if (v == null) return null;
-    
-    // Handle single sprint object
+    if (v is JiraSprintRef) return _validSprintRef(v);
+
+    // Handle single sprint object (Map from API or cache)
     if (v is Map<String, dynamic>) {
       try {
-        return JiraSprintRef.fromJson(v);
+        final ref = JiraSprintRef.fromJson(v);
+        return _validSprintRef(ref);
       } catch (e) {
         // If parsing fails, try to extract basic fields
         final id = intFromJson(v['id']);
         final name = stringFromJson(v['name']);
-        if (id != null && name != null) {
+        if (id != null && id != 0 && name != null && name.isNotEmpty) {
           return JiraSprintRef(
             id: id,
             name: name,
@@ -254,12 +257,13 @@ class JiraIssueFields {
       final last = v.last;
       if (last is Map<String, dynamic>) {
         try {
-          return JiraSprintRef.fromJson(last);
+          final ref = JiraSprintRef.fromJson(last);
+          return _validSprintRef(ref);
         } catch (e) {
           // Fallback parsing
           final id = intFromJson(last['id']);
           final name = stringFromJson(last['name']);
-          if (id != null && name != null) {
+          if (id != null && id != 0 && name != null && name.isNotEmpty) {
             return JiraSprintRef(
               id: id,
               name: name,
@@ -271,6 +275,12 @@ class JiraIssueFields {
     }
     
     return null;
+  }
+
+  /// Treat ref as null when id is 0 or name is empty (backlog/placeholder from API).
+  static JiraSprintRef? _validSprintRef(JiraSprintRef ref) {
+    if (ref.id == 0 || ref.name.isEmpty) return null;
+    return ref;
   }
 }
 

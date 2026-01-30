@@ -665,9 +665,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  static const _languageFlags = {'en': '🇺🇸', 'vi': '🇻🇳'};
+
   Future<void> _showLanguagePicker() async {
     final l10n = AppLocalizations.of(context);
     final localeNotifier = context.read<LocaleNotifier>();
+    final currentCode = localeNotifier.locale.languageCode;
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -676,14 +679,18 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: Text(_languageFlags['en']!, style: const TextStyle(fontSize: 28)),
               title: Text(l10n.languageEnglish),
+              selected: currentCode == 'en',
               onTap: () {
                 localeNotifier.setLocale('en');
                 Navigator.of(context).pop();
               },
             ),
             ListTile(
+              leading: Text(_languageFlags['vi']!, style: const TextStyle(fontSize: 28)),
               title: Text(l10n.languageVietnamese),
+              selected: currentCode == 'vi',
               onTap: () {
                 localeNotifier.setLocale('vi');
                 Navigator.of(context).pop();

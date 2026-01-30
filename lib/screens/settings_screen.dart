@@ -60,6 +60,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _tempSelectedBoardId = boardId;
         });
         await _loadBoards();
+        // Ensure default board is in the list so it displays as selected (it may not be in first page)
+        if (mounted && boardId != null && _boards.where((b) => b.id == boardId).isEmpty) {
+          try {
+            final b = await api.getBoardById(boardId);
+            if (b != null && mounted) setState(() => _boards = [b, ..._boards]);
+          } catch (_) {}
+        }
       }
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
