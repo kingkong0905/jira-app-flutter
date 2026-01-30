@@ -1,6 +1,6 @@
 # Jira Management – Flutter App
 
-A Flutter app for managing Jira boards and viewing tickets, with **the same business logic** as the [React Native Jira app](https://github.com/kingkong0905/jira-app).
+A Flutter app for managing Jira boards and viewing tickets.
 
 ## Features
 
