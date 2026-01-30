@@ -32,12 +32,12 @@ class IssueCard extends StatelessWidget {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.only(bottom: AppTheme.heightXxl),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: AppTheme.paddingLg,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -46,7 +46,7 @@ class IssueCard extends StatelessWidget {
                   Text(
                     issue.key,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: AppTheme.fontSizeBase,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.primary,
                     ),
@@ -68,7 +68,7 @@ class IssueCard extends StatelessWidget {
                     child: Text(
                       issue.fields.status.name,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTheme.fontSizeXs,
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.3,
@@ -77,18 +77,18 @@ class IssueCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppTheme.heightLg),
               Text(
                 issue.fields.summary,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: AppTheme.fontSizeLg,
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w500,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppTheme.heightXl),
               Row(
                 children: [
                   Container(
@@ -100,7 +100,7 @@ class IssueCard extends StatelessWidget {
                     child: Text(
                       issue.fields.issuetype.name,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTheme.fontSizeSm,
                         color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w600,
                       ),
@@ -122,19 +122,19 @@ class IssueCard extends StatelessWidget {
                                   issue.fields.assignee!.displayName.isNotEmpty
                                       ? issue.fields.assignee!.displayName[0].toUpperCase()
                                       : '?',
-                                  style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: Colors.white, fontWeight: FontWeight.w600),
                                 )
                               : null,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: AppTheme.widthSm),
                         Text(
                           issue.fields.assignee!.displayName,
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textSecondary),
                         ),
                       ],
                     )
                   else
-                    Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textSecondary)),
                 ],
               ),
             ],

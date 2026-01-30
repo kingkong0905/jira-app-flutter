@@ -4,6 +4,39 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/jira_models.dart';
 
+/// HTTP Status Code constants
+class HttpStatus {
+  HttpStatus._();
+  
+  // Success (2xx)
+  static const int ok = 200;
+  static const int created = 201;
+  static const int noContent = 204;
+  
+  // Client Error (4xx)
+  static const int badRequest = 400;
+  static const int unauthorized = 401;
+  static const int forbidden = 403;
+  static const int notFound = 404;
+  
+  // Success range
+  static const int successMin = 200;
+  static const int successMax = 299;
+  
+  // Client Error range
+  static const int clientErrorMin = 400;
+  static const int clientErrorMax = 499;
+  
+  // Server Error range
+  static const int serverErrorMin = 500;
+  static const int serverErrorMax = 599;
+  
+  // Helper methods
+  static bool isSuccess(int statusCode) => statusCode >= successMin && statusCode <= successMax;
+  static bool isClientError(int statusCode) => statusCode >= clientErrorMin && statusCode <= clientErrorMax;
+  static bool isServerError(int statusCode) => statusCode >= serverErrorMin && statusCode <= serverErrorMax;
+}
+
 /// Jira REST API client with same endpoints and auth as reference app (kingkong0905/jira-app).
 class JiraApiService {
   JiraConfig? _config;
@@ -121,22 +154,22 @@ class JiraApiService {
               .get(Uri.parse(url), headers: _headers)
               .timeout(_connectionTestTimeout);
           _log('response', 'statusCode=${r.statusCode} url=$url');
-          if (r.statusCode != 200 && r.body.isNotEmpty) {
+          if (r.statusCode != HttpStatus.ok && r.body.isNotEmpty) {
             final bodyPreview = r.body.length > 300 ? '${r.body.substring(0, 300)}...' : r.body;
             _log('response body', bodyPreview.replaceAll('\n', ' '));
           }
-          if (r.statusCode == 200) {
+          if (r.statusCode == HttpStatus.ok) {
             _log('testConnectionResult', 'SUCCESS');
             return null;
           }
-          if (r.statusCode == 401) {
+          if (r.statusCode == HttpStatus.unauthorized) {
             return 'Invalid email or API token. Check credentials and try again.';
           }
-          if (r.statusCode == 403) {
+          if (r.statusCode == HttpStatus.forbidden) {
             return 'Access forbidden. Check your Jira permissions.';
           }
           // 404 etc.: try next URL
-          if (r.statusCode == 404) {
+          if (r.statusCode == HttpStatus.notFound) {
             _log('testConnectionResult', '404, trying next API version');
             continue;
           }
@@ -187,7 +220,7 @@ class JiraApiService {
     for (final path in ['/rest/api/3/myself', '/rest/api/2/myself']) {
       try {
         final r = await http.get(Uri.parse('$_baseUrl$path'), headers: _headers).timeout(_timeout);
-        if (r.statusCode == 200) {
+        if (r.statusCode == HttpStatus.ok) {
           final json = jsonDecode(r.body) as Map<String, dynamic>;
           return JiraUser.fromJson(json);
         }
@@ -202,7 +235,7 @@ class JiraApiService {
     try {
       final uri = Uri.parse('$_baseUrl/rest/api/3/user').replace(queryParameters: {'accountId': accountId});
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpStatus.ok) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
         return JiraUser.fromJson(json);
       }
@@ -214,7 +247,7 @@ class JiraApiService {
   Future<List<int>?> fetchAttachmentBytes(String contentUrl) async {
     try {
       final r = await http.get(Uri.parse(contentUrl), headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) return r.bodyBytes;
+      if (r.statusCode == HttpStatus.ok) return r.bodyBytes;
     } catch (_) {}
     return null;
   }
@@ -240,7 +273,7 @@ class JiraApiService {
       final streamedResponse = await request.send().timeout(_timeout);
       final response = await http.Response.fromStream(streamedResponse);
       
-      if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (HttpStatus.isSuccess(response.statusCode)) {
         // Clear cache for issue details
         _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
         try {
@@ -308,7 +341,7 @@ class JiraApiService {
       final streamedResponse = await request.send().timeout(_timeout);
       final response = await http.Response.fromStream(streamedResponse);
       
-      if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (HttpStatus.isSuccess(response.statusCode)) {
         // Clear cache for issue details
         _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
         try {
@@ -382,7 +415,7 @@ class JiraApiService {
 
     final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final boards = (json['values'] as List<dynamic>?)
@@ -403,7 +436,7 @@ class JiraApiService {
           headers: _headers,
         )
         .timeout(_timeout);
-    if (r.statusCode != 200) return null;
+    if (r.statusCode != HttpStatus.ok) return null;
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     return JiraBoard.fromJson(json);
   }
@@ -426,7 +459,7 @@ class JiraApiService {
     }
     final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final list = (json['issues'] as List<dynamic>?) ?? [];
@@ -455,7 +488,7 @@ class JiraApiService {
       }
       final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
       final json = jsonDecode(r.body) as Map<String, dynamic>;
       final list = (json['issues'] as List<dynamic>?) ?? [];
       for (final e in list) {
@@ -479,7 +512,7 @@ class JiraApiService {
     final params = {'maxResults': '1000', 'fields': 'assignee'};
     final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != HttpStatus.ok) return [];
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final list = (json['issues'] as List<dynamic>?) ?? [];
@@ -510,8 +543,8 @@ class JiraApiService {
             headers: _headers,
           )
           .timeout(_timeout);
-      if (r.statusCode == 400 || r.statusCode == 404) return [];
-      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      if (r.statusCode == HttpStatus.badRequest || r.statusCode == HttpStatus.notFound) return [];
+      if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
 
       final json = jsonDecode(r.body) as Map<String, dynamic>;
       final list = (json['values'] as List<dynamic>?) ?? [];
@@ -564,7 +597,7 @@ class JiraApiService {
         body: jsonEncode(body),
       ).timeout(_timeout);
 
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (HttpStatus.isSuccess(r.statusCode)) {
         clearCache();
         return null; // Success
       }
@@ -607,7 +640,7 @@ class JiraApiService {
     final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/sprint/$sprintId/issue')
         .replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final list = (json['issues'] as List<dynamic>?) ?? [];
@@ -635,7 +668,7 @@ class JiraApiService {
       }
       final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/backlog').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
 
       final json = jsonDecode(r.body) as Map<String, dynamic>;
       // Jira Agile backlog: standard key is 'issues'; some responses use 'values' or nest under 'contents'
@@ -681,7 +714,7 @@ class JiraApiService {
         'fields': fields,
       });
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return results;
+      if (r.statusCode != HttpStatus.ok) return results;
       final json = jsonDecode(r.body) as Map<String, dynamic>;
       final list = (json['issues'] as List<dynamic>?) ?? [];
       for (final e in list) {
@@ -705,7 +738,7 @@ class JiraApiService {
     };
     final uri = Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final issue = JiraIssue.fromJson(json);
@@ -720,7 +753,7 @@ class JiraApiService {
         Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpStatus.ok) return [];
       final list = jsonDecode(r.body);
       if (list is! List) return [];
       return (list as List<dynamic>)
@@ -738,7 +771,7 @@ class JiraApiService {
         Uri.parse('$_baseUrl/rest/applinks/3.0/applinks'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return null;
+      if (r.statusCode != HttpStatus.ok) return null;
       final list = jsonDecode(r.body);
       if (list is! List) return null;
       for (final e in list as List<dynamic>) {
@@ -794,7 +827,7 @@ class JiraApiService {
         headers: _headers,
         body: jsonEncode(body),
       ).timeout(_timeout);
-      if (r.statusCode == 200 || r.statusCode == 201) return null;
+      if (r.statusCode == HttpStatus.ok || r.statusCode == HttpStatus.created) return null;
       return r.body;
     } catch (e) {
       return e.toString();
@@ -808,7 +841,7 @@ class JiraApiService {
         Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink/$linkId'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode == 204 || r.statusCode == 200) return null;
+      if (r.statusCode == HttpStatus.noContent || r.statusCode == HttpStatus.ok) return null;
       return r.body;
     } catch (e) {
       return e.toString();
@@ -826,7 +859,7 @@ class JiraApiService {
       },
     );
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != HttpStatus.ok) return [];
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final list = (json['issues'] as List<dynamic>?) ?? [];
     return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
@@ -841,7 +874,7 @@ class JiraApiService {
     try {
       final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: params('parentEpic = "$issueKey"'));
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpStatus.ok) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
         final list = (json['issues'] as List<dynamic>?) ?? [];
         if (list.isNotEmpty) {
@@ -854,7 +887,7 @@ class JiraApiService {
     try {
       final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: params('parent = "$issueKey"'));
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpStatus.ok) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
         final list = (json['issues'] as List<dynamic>?) ?? [];
         if (list.isNotEmpty) {
@@ -868,7 +901,7 @@ class JiraApiService {
       final jql = '"Epic Link" = "$issueKey"';
       final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {'jql': jql, 'maxResults': '100', 'fields': fields});
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpStatus.ok) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
         final list = (json['issues'] as List<dynamic>?) ?? [];
         return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
@@ -885,7 +918,7 @@ class JiraApiService {
         Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/transitions'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpStatus.ok) return [];
       final json = jsonDecode(r.body) as Map<String, dynamic>;
       final list = json['transitions'] as List<dynamic>?;
       if (list == null) return [];
@@ -903,7 +936,7 @@ class JiraApiService {
         headers: _headers,
         body: jsonEncode({'transition': {'id': transitionId}}),
       ).timeout(_timeout);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (HttpStatus.isSuccess(r.statusCode)) {
         _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
         return null;
       }
@@ -920,7 +953,7 @@ class JiraApiService {
       if (query != null && query.isNotEmpty) params['query'] = query;
       final uri = Uri.parse('$_baseUrl/rest/api/3/user/assignable/search').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpStatus.ok) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => JiraUser.fromJson(e as Map<String, dynamic>)).toList();
@@ -933,7 +966,7 @@ class JiraApiService {
   Future<List<Map<String, dynamic>>> getPriorities() async {
     try {
       final r = await http.get(Uri.parse('$_baseUrl/rest/api/3/priority'), headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpStatus.ok) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => e as Map<String, dynamic>).toList();
@@ -950,7 +983,7 @@ class JiraApiService {
       headers: _headers,
       body: body,
     ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
+    if (HttpStatus.isSuccess(r.statusCode)) {
       _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
       return null;
     }
@@ -962,7 +995,7 @@ class JiraApiService {
       queryParameters: {'expand': 'renderedBody'},
     );
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != HttpStatus.ok) return [];
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     return (json['comments'] as List<dynamic>?) ?? [];
   }
@@ -1248,7 +1281,7 @@ class JiraApiService {
       body: jsonEncode(payload),
     ).timeout(_timeout);
     
-    if (r.statusCode >= 200 && r.statusCode < 300) {
+    if (HttpStatus.isSuccess(r.statusCode)) {
       _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
       return null;
     }
@@ -1270,7 +1303,7 @@ class JiraApiService {
       headers: _headers,
       body: jsonEncode(body),
     ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
+    if (HttpStatus.isSuccess(r.statusCode)) {
       _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
       return null;
     }
@@ -1283,7 +1316,7 @@ class JiraApiService {
       Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/comment/$commentId'),
       headers: _headers,
     ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
+    if (HttpStatus.isSuccess(r.statusCode)) {
       _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
       return null;
     }
@@ -1298,7 +1331,7 @@ class JiraApiService {
           body: jsonEncode({'state': 'closed'}),
         )
         .timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpStatus.ok) throw JiraApiException(r.statusCode, r.body);
     clearCache();
   }
 
@@ -1322,7 +1355,7 @@ class JiraApiService {
             body: jsonEncode(body),
           )
           .timeout(_timeout);
-      if (r.statusCode != 200) return 'Failed to update sprint: ${r.statusCode}';
+      if (r.statusCode != HttpStatus.ok) return 'Failed to update sprint: ${r.statusCode}';
       clearCache();
       return null;
     } catch (e) {
@@ -1337,7 +1370,7 @@ class JiraApiService {
       final r = await http
           .delete(Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'), headers: _headers)
           .timeout(_timeout);
-      if (r.statusCode != 200 && r.statusCode != 204) return 'Failed to delete sprint: ${r.statusCode}';
+      if (r.statusCode != HttpStatus.ok && r.statusCode != HttpStatus.noContent) return 'Failed to delete sprint: ${r.statusCode}';
       clearCache();
       return null;
     } catch (e) {
@@ -1352,7 +1385,7 @@ class JiraApiService {
         Uri.parse('$_baseUrl/rest/api/3/project/$projectKey/statuses'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpStatus.ok) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => {
@@ -1372,7 +1405,7 @@ class JiraApiService {
       if (query != null && query.isNotEmpty) params['query'] = query;
       final uri = Uri.parse('$_baseUrl/rest/api/3/user/assignable/search').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpStatus.ok) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => JiraUser.fromJson(e as Map<String, dynamic>)).toList();
@@ -1396,7 +1429,7 @@ class JiraApiService {
         body: body,
       ).timeout(_timeout);
       
-      if (r.statusCode != 200) {
+      if (r.statusCode != HttpStatus.ok) {
         debugPrint('JQL search error: ${r.statusCode} ${r.body}');
         return [];
       }
@@ -1465,7 +1498,7 @@ class JiraApiService {
         body: body,
       ).timeout(_timeout);
 
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (HttpStatus.isSuccess(r.statusCode)) {
         final responseJson = jsonDecode(r.body) as Map<String, dynamic>;
         final issueKey = responseJson['key'] as String?;
         
@@ -1520,7 +1553,7 @@ class JiraApiService {
         headers: _headers,
         body: body,
       ).timeout(_timeout);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (HttpStatus.isSuccess(r.statusCode)) {
         _cache.remove(_cacheKey('/rest/api/3/issue/$issueKey', {}));
         return null;
       }
@@ -1544,7 +1577,7 @@ class JiraApiService {
         headers: _headers,
         body: body,
       ).timeout(_timeout);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (HttpStatus.isSuccess(r.statusCode)) {
         _cache.remove(_cacheKey('/rest/api/3/issue/$issueKey', {}));
         return null;
       }

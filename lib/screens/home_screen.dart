@@ -483,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const CircularProgressIndicator(color: AppTheme.primary),
               const SizedBox(height: 16),
-              Text(AppLocalizations.of(context).loadingJiraBoard, style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+              Text(AppLocalizations.of(context).loadingJiraBoard, style: TextStyle(color: AppTheme.textMuted, fontSize: AppTheme.fontSizeLg)),
             ],
           ),
         ),
@@ -517,7 +517,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      padding: AppTheme.paddingFromLTRB20_16_20_20,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.primary,
         boxShadow: [
@@ -580,7 +580,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: AppTheme.primary,
               ),
               margin: EdgeInsets.zero,
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+              padding: AppTheme.paddingFromLTRB20_16_20_16,
               child: Row(
                 children: [
                   CircleAvatar(
@@ -593,7 +593,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             initial,
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 28,
+                              fontSize: AppTheme.fontSizeXxxl,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -609,7 +609,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           showName,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 18,
+                            fontSize: AppTheme.fontSizeXl,
                             fontWeight: FontWeight.w700,
                           ),
                           maxLines: 2,
@@ -621,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             email,
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.9),
-                              fontSize: 13,
+                              fontSize: AppTheme.fontSizeMd,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -679,7 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Text(_languageFlags['en']!, style: const TextStyle(fontSize: 28)),
+              leading: Text(_languageFlags['en']!, style: const TextStyle(fontSize: AppTheme.fontSizeXxxl)),
               title: Text(l10n.languageEnglish),
               selected: currentCode == 'en',
               onTap: () {
@@ -688,7 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: Text(_languageFlags['vi']!, style: const TextStyle(fontSize: 28)),
+              leading: Text(_languageFlags['vi']!, style: const TextStyle(fontSize: AppTheme.fontSizeXxxl)),
               title: Text(l10n.languageVietnamese),
               selected: currentCode == 'vi',
               onTap: () {
@@ -728,7 +728,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildErrorBanner() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+      padding: AppTheme.paddingFromLTRB12_10_8_10,
       color: AppTheme.errorBg,
       child: Row(
         children: [
@@ -737,7 +737,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Text(
               _error!,
-              style: const TextStyle(color: AppTheme.error, fontSize: 13),
+              style: const TextStyle(color: AppTheme.error, fontSize: AppTheme.fontSizeMd),
             ),
           ),
           Semantics(
@@ -777,7 +777,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 AppLocalizations.of(context).board + ':',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                style: TextStyle(fontSize: AppTheme.fontSizeMd, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -785,7 +785,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _selectedBoard != null
                       ? '${_selectedBoard!.name} (${_selectedBoard!.type})'
                       : AppLocalizations.of(context).selectBoard + '...',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
+                  style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -821,7 +821,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Text(
             AppLocalizations.of(context).assignee + ':',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: AppTheme.fontSizeMd, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -845,9 +845,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _assigneeChip(String label, String value) {
     final selected = _selectedAssignee == value;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: AppTheme.paddingRight8,
       child: FilterChip(
-        label: Text(label, style: TextStyle(fontSize: 13, color: selected ? Colors.white : null)),
+        label: Text(label, style: TextStyle(fontSize: AppTheme.fontSizeMd, color: selected ? Colors.white : null)),
         selected: selected,
         onSelected: (sel) async {
           if (!sel) return;
@@ -885,7 +885,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               label,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: AppTheme.fontSizeBase,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w600,
                 color: active ? AppTheme.primary : AppTheme.textMuted,
               ),
@@ -900,7 +900,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_activeSprint == null) return const SizedBox.shrink();
     final s = _activeSprint!;
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      margin: AppTheme.marginFromLTRB20_16_20_8,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.primaryBg,
@@ -912,7 +912,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              Text('🏃 ${s.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text('🏃 ${s.name}', style: const TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
             ],
           ),
           if (s.startDate != null || s.endDate != null) ...[
@@ -920,10 +920,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 if (s.startDate != null)
-                  Text('Start: ${_formatDate(s.startDate!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text('Start: ${_formatDate(s.startDate!)}', style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textSecondary)),
                 if (s.startDate != null && s.endDate != null) const SizedBox(width: 16),
                 if (s.endDate != null)
-                  Text('End: ${_formatDate(s.endDate!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text('End: ${_formatDate(s.endDate!)}', style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textSecondary)),
               ],
             ),
           ],
@@ -997,7 +997,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (_selectedBoard == null) {
       return Center(
-        child: Text(AppLocalizations.of(context).selectBoardToViewIssues, style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+        child: Text(AppLocalizations.of(context).selectBoardToViewIssues, style: TextStyle(color: AppTheme.textSecondary, fontSize: AppTheme.fontSizeBaseLg)),
       );
     }
     if (_loading) {
@@ -1068,7 +1068,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: AppTheme.paddingBottom8,
                   child: Row(
                     children: [
                       Container(
@@ -1079,7 +1079,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: Text(
                           '${entry.key} (${entry.value.length})',
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                          style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeMd, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -1118,7 +1118,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: AppTheme.paddingBottom8,
                   child: Row(
                     children: [
                       Icon(Icons.event, size: 18, color: color),
@@ -1131,7 +1131,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: Text(
                           '${AppLocalizations.of(context).timelineGroupLabel(entry.key)} (${entry.value.length})',
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                          style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeMd, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
@@ -1185,7 +1185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    margin: const EdgeInsets.only(bottom: 8),
+                    margin: EdgeInsets.only(bottom: AppTheme.heightLg),
                     decoration: BoxDecoration(
                       color: isActiveSprint ? AppTheme.primaryBg : AppTheme.surfaceMuted,
                       borderRadius: BorderRadius.circular(8),
@@ -1213,7 +1213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: Text(
                                       isBacklog ? '📋 ${AppLocalizations.of(context).backlog}' : '🏃 ${group.sprint}',
                                       style: const TextStyle(
-                                        fontSize: 15,
+                                        fontSize: AppTheme.fontSizeBaseLg,
                                         fontWeight: FontWeight.w700,
                                         color: AppTheme.textPrimary,
                                       ),
@@ -1230,7 +1230,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         AppLocalizations.of(context).active,
                                         style: TextStyle(
                                           color: Colors.white,
-                                          fontSize: 10,
+                                          fontSize: AppTheme.fontSizeXxs,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -1276,7 +1276,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Text(
                                   '${group.issues.length} issues  •  ✅ $doneCount  •  🔄 $inProgressCount  •  📝 $todoCount',
                                   style: const TextStyle(
-                                    fontSize: 12,
+                                    fontSize: AppTheme.fontSizeSm,
                                     color: AppTheme.textSecondary,
                                   ),
                                 ),

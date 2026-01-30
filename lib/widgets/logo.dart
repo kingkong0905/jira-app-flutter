@@ -12,21 +12,21 @@ class Logo extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 64,
-          height: 64,
+          width: AppTheme.height64,
+          height: AppTheme.height64,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(16),
           ),
           child: const Center(
-            child: Text('✓', style: TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold)),
+            child: Text('✓', style: TextStyle(fontSize: AppTheme.fontSizeXxxlXxl, color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppTheme.heightXxl),
         const Text(
           AppTheme.appName,
           style: TextStyle(
-            fontSize: 22,
+            fontSize: AppTheme.fontSizeXxl,
             fontWeight: FontWeight.w700,
             color: Colors.white,
             letterSpacing: 0.3,
@@ -35,7 +35,7 @@ class Logo extends StatelessWidget {
         Text(
           AppLocalizations.of(context).taskManager,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: AppTheme.fontSizeMd,
             color: Colors.white.withValues(alpha: 0.85),
             fontWeight: FontWeight.w500,
           ),

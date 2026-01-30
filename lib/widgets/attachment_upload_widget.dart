@@ -266,9 +266,9 @@ class _AttachmentUploadWidgetState extends State<AttachmentUploadWidget> {
         children: [
           if (isImage && (attachment.filePath != null || attachment.fileBytes != null))
             Container(
-              width: 24,
-              height: 24,
-              margin: const EdgeInsets.only(right: 8),
+              width: AppTheme.widthXxl,
+              height: AppTheme.widthXxl,
+              margin: AppTheme.paddingRight8,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
                 image: attachment.filePath != null

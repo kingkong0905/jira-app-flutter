@@ -109,8 +109,8 @@ class _SetupScreenState extends State<SetupScreen> {
       children: [
         _stepDot(active: _step >= 1, completed: _step > 1),
         Container(
-          width: 32,
-          height: 2,
+          width: AppTheme.widthXxxxl,
+          height: AppTheme.heightSm,
           color: _step > 1 ? Colors.white : Colors.white.withValues(alpha: 0.4),
         ),
         _stepDot(active: _step >= 2, completed: false),
@@ -120,12 +120,12 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Widget _stepDot({required bool active, required bool completed}) {
     return Container(
-      width: 28,
-      height: 28,
+      width: AppTheme.widthXxxl,
+      height: AppTheme.heightXxxxxxl,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: completed ? Colors.white : (active ? Colors.white : Colors.white.withValues(alpha: 0.4)),
-        border: active && !completed ? Border.all(color: Colors.white, width: 2) : null,
+        border: active && !completed ? Border.all(color: Colors.white, width: AppTheme.widthXs) : null,
       ),
       child: completed
           ? const Icon(Icons.check, size: 18, color: AppTheme.primary)
@@ -147,19 +147,19 @@ class _SetupScreenState extends State<SetupScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 20),
+              const SizedBox(height: AppTheme.heightXxxxl),
               const Logo(),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppTheme.heightXxxl),
               _buildStepIndicator(),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppTheme.heightXxxxl),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: AppTheme.paddingHorizontal24,
                   child: Card(
                     elevation: 10,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                     child: Padding(
-                      padding: const EdgeInsets.all(28),
+                      padding: AppTheme.padding28,
                       child: _step == 1 ? _buildStep1() : _buildStep2(),
                     ),
                   ),
@@ -179,14 +179,14 @@ class _SetupScreenState extends State<SetupScreen> {
       children: [
         Text(
           AppLocalizations.of(context).step1Of2,
-          style: TextStyle(fontSize: 14, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppTheme.heightLg),
         Text(
           AppLocalizations.of(context).enterApiToken,
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: TextStyle(fontSize: AppTheme.fontSizeXxlLg, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppTheme.heightXxxxxl),
         TextField(
           controller: _apiTokenController,
           obscureText: true,
@@ -200,9 +200,9 @@ class _SetupScreenState extends State<SetupScreen> {
           ),
           onSubmitted: (_) => _nextStep(),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: AppTheme.heightXxxxl),
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: AppTheme.paddingMd,
           decoration: BoxDecoration(
             color: AppTheme.primaryBg,
             borderRadius: BorderRadius.circular(12),
@@ -210,26 +210,26 @@ class _SetupScreenState extends State<SetupScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('💡', style: TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
+              const Text('💡', style: TextStyle(fontSize: AppTheme.fontSizeXl)),
+              const SizedBox(width: AppTheme.widthMd),
               Expanded(
                 child: Text(
                   AppLocalizations.of(context).getApiTokenFrom,
-                  style: TextStyle(fontSize: 13, color: AppTheme.primary, height: 1.4),
+                  style: TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.primary, height: 1.4),
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: AppTheme.heightXxxxxxl),
         FilledButton(
           onPressed: _nextStep,
           style: FilledButton.styleFrom(
             backgroundColor: AppTheme.primary,
-            padding: const EdgeInsets.symmetric(vertical: 18),
+            padding: AppTheme.paddingVertical18,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: Text(AppLocalizations.of(context).next, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          child: Text(AppLocalizations.of(context).next, style: const TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w700)),
         ),
       ],
     );
@@ -246,17 +246,17 @@ class _SetupScreenState extends State<SetupScreen> {
           label: Text(AppLocalizations.of(context).back),
           style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppTheme.heightLg),
         Text(
           AppLocalizations.of(context).step2Of2,
-          style: TextStyle(fontSize: 14, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppTheme.heightLg),
         Text(
           AppLocalizations.of(context).connectToJiraWorkspace,
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: TextStyle(fontSize: AppTheme.fontSizeXxlLg, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppTheme.heightXxxxxl),
         TextField(
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
@@ -270,7 +270,7 @@ class _SetupScreenState extends State<SetupScreen> {
             fillColor: AppTheme.surfaceMuted,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppTheme.heightXxxl),
         TextField(
           controller: _jiraUrlController,
           keyboardType: TextInputType.url,
@@ -285,21 +285,21 @@ class _SetupScreenState extends State<SetupScreen> {
             fillColor: AppTheme.surfaceMuted,
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: AppTheme.heightXxxxxxl),
         FilledButton(
           onPressed: _loading ? null : _submit,
           style: FilledButton.styleFrom(
             backgroundColor: AppTheme.primary,
-            padding: const EdgeInsets.symmetric(vertical: 18),
+            padding: AppTheme.paddingVertical18,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: _loading
               ? const SizedBox(
-                  height: 24,
-                  width: 24,
+                  height: AppTheme.heightXxxxxl,
+                  width: AppTheme.widthXxl,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : Text(AppLocalizations.of(context).letsGo, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              : Text(AppLocalizations.of(context).letsGo, style: const TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w700)),
         ),
       ],
     );

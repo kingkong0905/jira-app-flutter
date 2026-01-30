@@ -205,15 +205,15 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               clipBehavior: Clip.antiAlias,
               child: ListView.separated(
                 physics: const ClampingScrollPhysics(),
-                padding: EdgeInsets.zero,
+                padding: AppTheme.paddingZero,
                 itemCount: _mentionSuggestions.length,
-                separatorBuilder: (context, index) => const Divider(height: 1, thickness: 1),
+                separatorBuilder: (context, index) => const Divider(height: AppTheme.heightXs, thickness: 1),
                 itemBuilder: (context, index) {
                   final user = _mentionSuggestions[index];
                   return InkWell(
                     onTap: () => _insertMention(user),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      padding: AppTheme.paddingHorizontalMdVerticalMd,
                       child: Row(
                         children: [
                           if (user.avatarUrls?['48x48'] != null)
@@ -221,14 +221,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                               borderRadius: BorderRadius.circular(18),
                               child: Image.network(
                                 user.avatarUrls!['48x48']!,
-                                width: 36,
-                                height: 36,
+                                width: AppTheme.widthXxxxxl,
+                                height: AppTheme.heightXxxxxxxl,
                                 errorBuilder: (context, error, stackTrace) => _mentionAvatarPlaceholder(user),
                               ),
                             )
                           else
                             _mentionAvatarPlaceholder(user),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppTheme.widthLg),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -264,8 +264,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Widget _mentionAvatarPlaceholder(JiraUser user) {
     return Container(
-      width: 36,
-      height: 36,
+      width: AppTheme.widthXxxxxl,
+      height: AppTheme.heightXxxxxxxl,
       decoration: BoxDecoration(
         color: AppTheme.primary,
         borderRadius: BorderRadius.circular(18),
@@ -490,14 +490,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               : _error != null
                   ? Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
+                        padding: AppTheme.paddingXl,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.error_outline, size: AppTheme.iconSizeXxl, color: AppTheme.error),
                             const SizedBox(height: AppTheme.spaceLg),
                             Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.overlayLight)),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: AppTheme.heightXxxxxl),
                             FilledButton(
                               onPressed: _load,
                               child: Text(AppLocalizations.of(context).retry),
@@ -509,49 +509,49 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   : _issue == null
                       ? Center(child: Text(AppLocalizations.of(context).issueNotFound))
                       : SingleChildScrollView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      padding: AppTheme.paddingHorizontalLgVerticalLg,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           _buildSummaryCard(),
                           _buildDetailsCard(),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: AppTheme.heightXxxl),
                           _buildDescriptionCard(),
                           if ((_issue!.fields.attachment ?? []).isNotEmpty) ...[
-                            const SizedBox(height: 24),
+                            const SizedBox(height: AppTheme.heightXxxxxl),
                             Text(AppLocalizations.of(context).attachments, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppTheme.heightLg),
                             _buildAttachmentsSection(),
                           ],
                           if (_issue!.fields.parent != null) ...[
-                            const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).parent, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppTheme.heightXxxxxl),
+                            Text(AppLocalizations.of(context).parent, style: const TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
+                            const SizedBox(height: AppTheme.heightLg),
                             _buildParentCard(),
                           ],
-                          const SizedBox(height: 24),
-                          Text(AppLocalizations.of(context).subtasks, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: AppTheme.heightXxxxxl),
+                          Text(AppLocalizations.of(context).subtasks, style: const TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: AppTheme.heightLg),
                           _buildSubtasksSection(),
                           if (_issue!.fields.issuetype.name.toLowerCase().contains('epic')) ...[
-                            const SizedBox(height: 24),
+                            const SizedBox(height: AppTheme.heightXxxxxl),
                             Text(AppLocalizations.of(context).issuesInThisEpic, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppTheme.heightLg),
                             _buildEpicChildrenSection(),
                           ],
                           if ((_issue!.fields.issuelinks ?? []).isNotEmpty) ...[
-                            const SizedBox(height: 24),
+                            const SizedBox(height: AppTheme.heightXxxxxl),
                             Text(AppLocalizations.of(context).linkedWorkItems, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppTheme.heightLg),
                             _buildLinkedWorkItemsSection(),
                           ],
-                          const SizedBox(height: 24),
+                          const SizedBox(height: AppTheme.heightXxxxxl),
                           Text(AppLocalizations.of(context).confluence, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: AppTheme.heightLg),
                           _buildConfluenceSection(),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: AppTheme.heightXxxxxl),
                           Text(AppLocalizations.of(context).comments, style: TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: AppTheme.heightXxl),
                           if (_replyToCommentId != null) _buildReplyBanner(),
                           Stack(
                             key: _commentInputKey,
@@ -574,16 +574,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                           controller: _newCommentQuillController,
                                           config: quill.QuillEditorConfig(
                                             placeholder: AppLocalizations.of(context).addCommentHint,
-                                            padding: const EdgeInsets.all(8),
+                                            padding: AppTheme.paddingSm,
                                           ),
                                           focusNode: _newCommentFocusNode,
                                           scrollController: _newCommentScrollController,
                                         ),
                                       ),
                                       Container(
-                                        padding: const EdgeInsets.all(8),
+                                        padding: AppTheme.paddingSm,
                                         decoration: const BoxDecoration(
-                                          border: Border(top: BorderSide(color: AppTheme.dividerColor, width: 1)),
+                                          border: Border(top: BorderSide(color: AppTheme.dividerColor, width: AppTheme.widthXs)),
                                         ),
                                         child: AttachmentUploadWidget(
                                           issueKey: widget.issueKey,
@@ -607,7 +607,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                 final postButton = FilledButton(
                                   onPressed: _addingComment ? null : _onAddComment,
                                   child: _addingComment
-                                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                      ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                       : Text(AppLocalizations.of(context).postComment),
                                 );
                                 if (useStacked) {
@@ -616,7 +616,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       inputField,
-                                      const SizedBox(height: 10),
+                                      const SizedBox(height: AppTheme.heightXl),
                                       postButton,
                                     ],
                                   );
@@ -625,7 +625,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Expanded(child: inputField),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: AppTheme.widthMd),
                                     postButton,
                                   ],
                                 );
@@ -633,10 +633,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: AppTheme.heightXxxl),
                           if (_comments.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.only(top: 8),
+                              padding: AppTheme.paddingTop8,
                               child: Text(AppLocalizations.of(context).noCommentsYet, style: TextStyle(color: AppTheme.overlayLight, fontStyle: FontStyle.italic)),
                             )
                           else
@@ -674,7 +674,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           child: GestureDetector(
             onTap: () {}, // prevent tap from closing when tapping the card
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
+              margin: AppTheme.paddingHorizontalXl,
               constraints: const BoxConstraints(maxWidth: 360),
               decoration: BoxDecoration(
                 color: AppTheme.white,
@@ -693,40 +693,40 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   ),
                   if (_loadingUserInfo)
                     const Padding(
-                      padding: EdgeInsets.only(bottom: 24),
+                      padding: AppTheme.paddingBottom24,
                       child: SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)),
+                        width: AppTheme.widthXxxxl,
+                        height: AppTheme.widthXxxxl,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
                       ),
                     )
                   else if (_selectedUser != null) ...[
                     CircleAvatar(
                       radius: 40,
-                      backgroundColor: const Color(0xFF0052CC),
+                      backgroundColor: AppTheme.primary,
                       backgroundImage: _selectedUser!.avatar48 != null ? NetworkImage(_selectedUser!.avatar48!) : null,
                       child: _selectedUser!.avatar48 == null
                           ? Text(
                               _selectedUser!.displayName.isNotEmpty ? _selectedUser!.displayName[0].toUpperCase() : '?',
-                              style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                              style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeXxxl, fontWeight: FontWeight.bold),
                             )
                           : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppTheme.heightXxxl),
                     Text(
                       _selectedUser!.displayName,
                       style: TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w600, color: AppTheme.overlayDark),
                       textAlign: TextAlign.center,
                     ),
                     if (_selectedUser!.emailAddress != null && _selectedUser!.emailAddress!.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppTheme.heightLg),
                       Text(
                         _selectedUser!.emailAddress!,
                         style: TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.overlayLight),
                         textAlign: TextAlign.center,
                       ),
                     ],
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppTheme.heightXxxxxl),
                   ],
                 ],
               ),
@@ -770,7 +770,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     : isVideo
                         ? (videoError != null
                             ? Padding(
-                                padding: const EdgeInsets.all(24),
+                                padding: AppTheme.paddingXl,
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -779,7 +779,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                     Text(AppLocalizations.of(context).videoFailedToLoad, style: TextStyle(color: AppTheme.white, fontSize: AppTheme.fontSizeLg)),
                                     const SizedBox(height: AppTheme.spaceSm),
                                     Text(videoError, style: TextStyle(color: AppTheme.white70, fontSize: AppTheme.fontSizeSm), maxLines: 2, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: AppTheme.heightXxxxxl),
                                     FilledButton.icon(
                                       onPressed: () async {
                                         final api = context.read<JiraApiService>();
@@ -801,7 +801,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                             : videoController != null && videoController.value.isInitialized
                                 ? _buildVideoPreviewPlayer(videoController)
                                 : Padding(
-                                    padding: const EdgeInsets.all(24),
+                                    padding: AppTheme.paddingXl,
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -812,14 +812,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                     ),
                                   ))
                         : Padding(
-                            padding: const EdgeInsets.all(24),
+                            padding: AppTheme.paddingXl,
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(_fileIcon(att), style: TextStyle(fontSize: AppTheme.fontSizeHuge)),
                                 const SizedBox(height: AppTheme.spaceLg),
                                 Text(att.filename, textAlign: TextAlign.center, style: TextStyle(color: AppTheme.white, fontSize: AppTheme.fontSizeLg), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: AppTheme.heightXxxxxl),
                                 FilledButton.icon(
                                   onPressed: () async {
                                     final api = context.read<JiraApiService>();
@@ -878,26 +878,26 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Widget _chip(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: AppTheme.paddingHorizontal12Vertical6,
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(label, style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeSm, fontWeight: FontWeight.w600)),
     );
   }
 
   Widget _detailRow(String label, Widget value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: AppTheme.paddingBottom10,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 110,
+            width: AppTheme.widthXxxxxxl,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500),
+              style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
             ),
           ),
           Expanded(child: value),
@@ -912,7 +912,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       children: [
         CircleAvatar(
           radius: radius,
-          backgroundColor: const Color(0xFF0052CC),
+          backgroundColor: AppTheme.primary,
           backgroundImage: user.avatar48 != null ? NetworkImage(user.avatar48!) : null,
           child: user.avatar48 == null
               ? Text(
@@ -921,8 +921,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 )
               : null,
         ),
-        const SizedBox(width: 8),
-        Flexible(child: Text(user.displayName, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
+        const SizedBox(width: AppTheme.widthMd),
+        Flexible(child: Text(user.displayName, style: const TextStyle(fontSize: AppTheme.fontSizeBase), overflow: TextOverflow.ellipsis)),
       ],
     );
   }
@@ -931,12 +931,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildSummaryCard() {
     final statusColor = _statusColor(_issue!.fields.status.statusCategory.key);
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
+      margin: AppTheme.paddingFromLTRB16_16_16_0,
+      padding: AppTheme.padding20,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E4E8)),
+        border: Border.all(color: AppTheme.borderAlt),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
@@ -948,9 +948,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(AppLocalizations.of(context).issueKey, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84), letterSpacing: 0.5)),
+                  Text(AppLocalizations.of(context).issueKey, style: const TextStyle(fontSize: AppTheme.fontSizeSm, fontWeight: FontWeight.w600, color: AppTheme.textSecondary, letterSpacing: 0.5)),
                   const SizedBox(height: 4),
-                  Text(_issue!.key, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF0052CC), letterSpacing: 0.3)),
+                  Text(_issue!.key, style: const TextStyle(fontSize: AppTheme.fontSizeXxlLg, fontWeight: FontWeight.w700, color: AppTheme.primary, letterSpacing: 0.3)),
                 ],
               ),
               if (_canEdit)
@@ -958,47 +958,47 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   onTap: _openStatusPicker,
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    padding: AppTheme.paddingHorizontal14Vertical6,
                     decoration: BoxDecoration(
                       color: statusColor,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 2, offset: const Offset(0, 1))],
                     ),
-                    child: Text(_issue!.fields.status.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5)),
+                    child: Text(_issue!.fields.status.name.toUpperCase(), style: const TextStyle(fontSize: AppTheme.fontSizeXs, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5)),
                   ),
                 )
               else
                 _chip(_issue!.fields.status.name, statusColor),
             ],
           ),
-          const SizedBox(height: 18),
-          Container(height: 1, color: const Color(0xFFE1E4E8)),
-          const SizedBox(height: 18),
+          const SizedBox(height: AppTheme.height18),
+          Container(height: AppTheme.heightXs, color: AppTheme.borderAlt),
+          const SizedBox(height: AppTheme.height18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
-                  const Text('📝', style: TextStyle(fontSize: 18)),
-                  const SizedBox(width: 8),
-                  Text(AppLocalizations.of(context).summary, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+                  const Text('📝', style: TextStyle(fontSize: AppTheme.fontSizeXl)),
+                  const SizedBox(width: AppTheme.widthMd),
+                  Text(AppLocalizations.of(context).summary, style: const TextStyle(fontSize: AppTheme.fontSizeLgMd, fontWeight: FontWeight.w700, color: AppTheme.textPrimary, letterSpacing: 0.2)),
                   if (_issue!.fields.priority != null) ...[
-                    const SizedBox(width: 8),
-                    Text(_getPriorityEmoji(_issue!.fields.priority!.name), style: const TextStyle(fontSize: 16)),
+                    const SizedBox(width: AppTheme.widthMd),
+                    Text(_getPriorityEmoji(_issue!.fields.priority!.name), style: const TextStyle(fontSize: AppTheme.fontSizeLg)),
                   ],
                 ],
               ),
               if (_canEdit)
                 TextButton(
                   onPressed: () => _openSummaryEdit(),
-                  child: Text(AppLocalizations.of(context).edit, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0052CC))),
+                  child: Text(AppLocalizations.of(context).edit, style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w600, color: AppTheme.primary)),
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppTheme.heightXxl),
           Text(
             _issue!.fields.summary,
-            style: const TextStyle(fontSize: 20, color: Color(0xFF172B4D), fontWeight: FontWeight.w600, height: 1.5, letterSpacing: 0.1),
+            style: const TextStyle(fontSize: AppTheme.fontSizeXlMd, color: AppTheme.textPrimary, fontWeight: FontWeight.w600, height: 1.5, letterSpacing: 0.1),
           ),
         ],
       ),
@@ -1009,12 +1009,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildDetailsCard() {
     final sprintDisplay = _formatSprint(context, _issue!.fields.sprint);
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
+      margin: AppTheme.paddingFromLTRB16_16_16_0,
+      padding: AppTheme.padding20,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E4E8)),
+        border: Border.all(color: AppTheme.borderAlt),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
@@ -1022,16 +1022,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         children: [
           Row(
             children: [
-              const Text('📋', style: TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
-              Text(AppLocalizations.of(context).details, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+              const Text('📋', style: TextStyle(fontSize: AppTheme.fontSizeXl)),
+              const SizedBox(width: AppTheme.widthMd),
+              Text(AppLocalizations.of(context).details, style: const TextStyle(fontSize: AppTheme.fontSizeLgMd, fontWeight: FontWeight.w700, color: AppTheme.textPrimary, letterSpacing: 0.2)),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppTheme.heightXxxl),
           _detailRowTap(
             icon: '👤',
             label: AppLocalizations.of(context).assignee,
-            value: _issue!.fields.assignee != null ? _userTile(_issue!.fields.assignee!, radius: 12) : Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: 15, color: Color(0xFF8993A4), fontStyle: FontStyle.italic)),
+            value: _issue!.fields.assignee != null ? _userTile(_issue!.fields.assignee!, radius: 12) : Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textMutedAlt, fontStyle: FontStyle.italic)),
             onTap: _canEdit ? _openAssigneePicker : null,
           ),
           if (_issue!.fields.reporter != null)
@@ -1046,24 +1046,24 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             value: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_getPriorityEmoji(_issue!.fields.priority?.name), style: const TextStyle(fontSize: 16)),
-                const SizedBox(width: 6),
-                Text(_issue!.fields.priority?.name ?? AppLocalizations.of(context).none, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
+                Text(_getPriorityEmoji(_issue!.fields.priority?.name), style: const TextStyle(fontSize: AppTheme.fontSizeLg)),
+                const SizedBox(width: AppTheme.widthSm),
+                Text(_issue!.fields.priority?.name ?? AppLocalizations.of(context).none, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, fontWeight: FontWeight.w500)),
               ],
             ),
             onTap: _canEdit ? _openPriorityPicker : null,
           ),
-          _detailRowStatic(icon: '🏷️', label: AppLocalizations.of(context).type, value: Text(_issue!.fields.issuetype.name, style: const TextStyle(fontSize: 14, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500))),
+          _detailRowStatic(icon: '🏷️', label: AppLocalizations.of(context).type, value: Text(_issue!.fields.issuetype.name, style: const TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.textSecondary, fontWeight: FontWeight.w500))),
           _detailRowTap(
             icon: '🏃',
             label: AppLocalizations.of(context).sprint,
-            value: Text(sprintDisplay, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+            value: Text(sprintDisplay, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: _canEdit ? _openSprintPicker : null,
           ),
           _detailRowTap(
             icon: '🎯',
             label: AppLocalizations.of(context).storyPoints,
-            value: Text(_issue!.fields.customfield_10016?.toString() ?? AppLocalizations.of(context).notSet, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
+            value: Text(_issue!.fields.customfield_10016?.toString() ?? AppLocalizations.of(context).notSet, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, fontWeight: FontWeight.w500)),
             onTap: _canEdit ? _openStoryPointsPicker : null,
           ),
           _detailRowTap(
@@ -1071,7 +1071,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             label: AppLocalizations.of(context).dueDate,
             value: Text(
               _issue!.fields.duedate != null ? _formatDueDate(_issue!.fields.duedate!) : AppLocalizations.of(context).notSet,
-              style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500),
+              style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, fontWeight: FontWeight.w500),
             ),
             onTap: _canEdit ? _openDueDatePicker : null,
           ),
@@ -1084,12 +1084,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildDescriptionCard() {
     final plain = _plainText(_issue!.fields.description).trim();
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      padding: const EdgeInsets.all(20),
+      margin: AppTheme.paddingFromLTRB16_0_16_0,
+      padding: AppTheme.padding20,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E4E8)),
+        border: Border.all(color: AppTheme.borderAlt),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
@@ -1098,17 +1098,17 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(AppLocalizations.of(context).description, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+              Text(AppLocalizations.of(context).description, style: const TextStyle(fontSize: AppTheme.fontSizeLgMd, fontWeight: FontWeight.w700, color: AppTheme.textPrimary, letterSpacing: 0.2)),
               if (_canEdit)
                 TextButton(
                   onPressed: _updatingDescription ? null : _openDescriptionEdit,
                   child: _updatingDescription
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))
-                      : const Text('Edit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0052CC))),
+                      ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                      : const Text('Edit', style: TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w600, color: AppTheme.primary)),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppTheme.heightXxl),
           _DescriptionBodyWidget(
             description: _issue!.fields.description,
             attachments: _issue!.fields.attachment ?? [],
@@ -1239,7 +1239,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Widget _detailRowTap({required String icon, required String label, required Widget value, VoidCallback? onTap}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: AppTheme.paddingBottom14,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
@@ -1247,15 +1247,15 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
-              width: 120,
+              width: AppTheme.widthXxxxxxxl,
               child: Row(
                 children: [
-                  Text(icon, style: const TextStyle(fontSize: 16)),
-                  const SizedBox(width: 8),
+                  Text(icon, style: const TextStyle(fontSize: AppTheme.fontSizeLg)),
+                  const SizedBox(width: AppTheme.widthMd),
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84)),
+                      style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1264,7 +1264,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             ),
             Expanded(
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                padding: AppTheme.paddingHorizontal10Vertical4,
                 decoration: BoxDecoration(
                   color: const Color(0x050052CC),
                   borderRadius: BorderRadius.circular(8),
@@ -1273,7 +1273,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Flexible(child: value),
-                    if (onTap != null) const Text(' ›', style: TextStyle(fontSize: 20, color: Color(0xFF8993A4), fontWeight: FontWeight.w300)),
+                    if (onTap != null) const Text(' ›', style: TextStyle(fontSize: AppTheme.fontSizeXlMd, color: AppTheme.textMutedAlt, fontWeight: FontWeight.w300)),
                   ],
                 ),
               ),
@@ -1286,20 +1286,20 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   Widget _detailRowStatic({required String icon, required String label, required Widget value}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: AppTheme.paddingBottom14,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
-            width: 120,
+            width: AppTheme.widthXxxxxxxl,
             child: Row(
               children: [
-                Text(icon, style: const TextStyle(fontSize: 16)),
-                const SizedBox(width: 8),
+                Text(icon, style: const TextStyle(fontSize: AppTheme.fontSizeLg)),
+                const SizedBox(width: AppTheme.widthMd),
                 Expanded(
                   child: Text(
                     label,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84)),
+                    style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1308,7 +1308,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           ),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+              padding: AppTheme.paddingHorizontal10Vertical4,
               decoration: BoxDecoration(
                 color: const Color(0x050052CC),
                 borderRadius: BorderRadius.circular(8),
@@ -1501,7 +1501,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             ),
           ),
           if (_loadingUsers)
-            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+            Padding(padding: AppTheme.paddingXl, child: const Center(child: CircularProgressIndicator(color: AppTheme.primary)))
           else ...[
             ListTile(
               title: Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontStyle: FontStyle.italic)),
@@ -1518,14 +1518,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   }
                 }
               },
-              trailing: _updatingAssignee == 'unassign' ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+              trailing: _updatingAssignee == 'unassign' ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2)) : null,
             ),
             ..._assignableUsers.map((u) {
               final isCurrent = _issue!.fields.assignee?.accountId == u.accountId;
               return ListTile(
                 leading: CircleAvatar(radius: 16, backgroundImage: u.avatar48 != null ? NetworkImage(u.avatar48!) : null, child: u.avatar48 == null ? Text(u.displayName.isNotEmpty ? u.displayName[0] : '?') : null),
                 title: Text(u.displayName),
-                subtitle: u.emailAddress != null ? Text(u.emailAddress!, style: const TextStyle(fontSize: 12)) : null,
+                subtitle: u.emailAddress != null ? Text(u.emailAddress!, style: const TextStyle(fontSize: AppTheme.fontSizeSm)) : null,
                 selected: isCurrent,
                 onTap: isCurrent ? null : () async {
                   setState(() => _updatingAssignee = u.accountId);
@@ -1540,7 +1540,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     }
                   }
                 },
-                trailing: _updatingAssignee == u.accountId ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                trailing: _updatingAssignee == u.accountId ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2)) : null,
               );
             }),
           ],
@@ -1554,14 +1554,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: AppLocalizations.of(context).sprint,
       onClose: () => setState(() => _showSprintPicker = false),
       child: _loadingSprints
-          ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: AppTheme.primary)))
           : ListView(
               shrinkWrap: true,
               children: [
                 ListTile(
-                  leading: const Text('📋', style: TextStyle(fontSize: 20)),
+                  leading: const Text('📋', style: TextStyle(fontSize: AppTheme.fontSizeXlMd)),
                   title: Text(AppLocalizations.of(context).backlog),
-                  trailing: _updatingSprintToBacklog ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                  trailing: _updatingSprintToBacklog ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                   onTap: _boardIdForSprint == null
                       ? null
                       : () async {
@@ -1583,11 +1583,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   final currentSprintId = _getSprintId(_issue?.fields.sprint);
                   final isCurrent = currentSprintId != null && currentSprintId == s.id;
                   return ListTile(
-                    leading: Text(s.state == 'active' ? '🏃' : '📅', style: const TextStyle(fontSize: 20)),
+                    leading: Text(s.state == 'active' ? '🏃' : '📅', style: const TextStyle(fontSize: AppTheme.fontSizeXlMd)),
                     title: Text(s.name),
-                    subtitle: Text(s.state.toUpperCase(), style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84))),
+                    subtitle: Text(s.state.toUpperCase(), style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textSecondary)),
                     selected: isCurrent,
-                    trailing: _updatingSprintId == s.id ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                    trailing: _updatingSprintId == s.id ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                     onTap: isCurrent
                         ? null
                         : () async {
@@ -1615,9 +1615,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: 'Status',
       onClose: () => setState(() => _showStatusPicker = false),
       child: _loadingTransitions
-          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: AppTheme.primary)))
           : _transitions.isEmpty
-              ? const Padding(padding: EdgeInsets.all(24), child: Text('No transitions available', style: TextStyle(color: Color(0xFF5E6C84))))
+              ? const Padding(padding: EdgeInsets.all(24), child: Text('No transitions available', style: TextStyle(color: AppTheme.textSecondary)))
               : ListView(
                   shrinkWrap: true,
                   children: _transitions.map((t) {
@@ -1642,7 +1642,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           }
                         }
                       },
-                      trailing: isTransitioning ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                      trailing: isTransitioning ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                     );
                   }).toList(),
                 ),
@@ -1654,7 +1654,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: 'Priority',
       onClose: () => setState(() => _showPriorityPicker = false),
       child: _loadingPriorities
-          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: AppTheme.primary)))
           : ListView(
               shrinkWrap: true,
               children: _priorities.map((p) {
@@ -1662,7 +1662,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 final name = p['name']?.toString() ?? 'Unknown';
                 final isUpdating = _updatingPriorityId == id;
                 return ListTile(
-                  leading: Text(_getPriorityEmoji(name), style: const TextStyle(fontSize: 20)),
+                  leading: Text(_getPriorityEmoji(name), style: const TextStyle(fontSize: AppTheme.fontSizeXlMd)),
                   title: Text(name),
                   onTap: () async {
                     setState(() => _updatingPriorityId = id);
@@ -1677,7 +1677,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       }
                     }
                   },
-                  trailing: isUpdating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                  trailing: isUpdating ? const SizedBox(width: AppTheme.widthXl, height: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                 );
               }).toList(),
             ),
@@ -1693,7 +1693,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         setState(() => _showStoryPointsPicker = false);
       },
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: AppTheme.paddingLg,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1704,7 +1704,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               controller: _storyPointsController,
               onChanged: (v) => setState(() => _storyPointsInput = v),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppTheme.heightXxl),
             Wrap(
               spacing: 8,
               children: [1, 2, 3, 5, 8, 13].map((n) => ActionChip(
@@ -1712,7 +1712,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 onPressed: () => setState(() => _storyPointsInput = '$n'),
               )).toList(),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppTheme.heightXxxl),
             FilledButton(
               onPressed: _updatingStoryPoints ? null : () async {
                 final input = _storyPointsController?.text.trim() ?? _storyPointsInput.trim();
@@ -1731,7 +1731,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   }
                 }
               },
-              child: _updatingStoryPoints ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Update'),
+              child: _updatingStoryPoints ? const SizedBox(height: AppTheme.widthXl, width: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Update'),
             ),
           ],
         ),
@@ -1744,13 +1744,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: AppLocalizations.of(context).dueDate,
       onClose: () => setState(() => _showDueDatePicker = false),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: AppTheme.paddingLg,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (Platform.isIOS)
               SizedBox(
-                height: 200,
+                height: AppTheme.height200,
                 child: CupertinoDatePicker(
                   mode: CupertinoDatePickerMode.date,
                   initialDateTime: _selectedDueDate ?? DateTime.now(),
@@ -1764,11 +1764,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 lastDate: DateTime(2100),
                 onDateChanged: (d) => setState(() => _selectedDueDate = d),
               ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppTheme.heightXxxl),
             Row(
               children: [
                 TextButton(onPressed: () => setState(() => _selectedDueDate = null), child: const Text('Clear')),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppTheme.widthMd),
                 FilledButton(
                   onPressed: _updatingDueDate ? null : () async {
                     setState(() => _updatingDueDate = true);
@@ -1784,7 +1784,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       }
                     }
                   },
-                  child: _updatingDueDate ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Update'),
+                  child: _updatingDueDate ? const SizedBox(height: AppTheme.widthXl, width: AppTheme.widthXl, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Update'),
                 ),
               ],
             ),
@@ -1818,7 +1818,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      Text(title, style: const TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w700)),
                       IconButton(icon: const Icon(Icons.close), onPressed: onClose),
                     ],
                   ),
@@ -1845,7 +1845,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: list.map((a) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: AppTheme.paddingBottom8,
           child: Material(
             color: AppTheme.white,
             borderRadius: BorderRadius.circular(8),
@@ -1853,26 +1853,26 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               onTap: () => _onAttachmentPress(a),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: AppTheme.paddingHorizontal12Vertical10,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppTheme.dividerColor),
                 ),
                 child: Row(
                   children: [
-                    Text(_fileIcon(a), style: const TextStyle(fontSize: 24)),
-                    const SizedBox(width: 12),
+                    Text(_fileIcon(a), style: const TextStyle(fontSize: AppTheme.fontSizeXxlLg)),
+                    const SizedBox(width: AppTheme.widthLg),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(a.filename, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF172B4D)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(a.filename, style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w500, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                           if (a.size != null)
-                            Text('${(a.size! / 1024).toStringAsFixed(1)} KB', style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A))),
+                            Text('${(a.size! / 1024).toStringAsFixed(1)} KB', style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textMutedSecondary)),
                         ],
                       ),
                     ),
-                    const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                    const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
                   ],
                 ),
               ),
@@ -1958,19 +1958,19 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final replyTo = list.isNotEmpty ? list.first : null;
     final name = replyTo != null ? (stringFromJson(replyTo['author'] is Map ? (replyTo['author'] as Map)['displayName'] : null) ?? 'Unknown') : 'Unknown';
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: EdgeInsets.only(bottom: AppTheme.heightLg),
+      padding: AppTheme.paddingHorizontal12Vertical10,
       decoration: BoxDecoration(
-        color: const Color(0xFFE6FCFF),
+        color: AppTheme.surfaceLightBlue,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         children: [
-          Expanded(child: Text('Replying to $name', style: const TextStyle(fontSize: 14, color: Color(0xFF0052CC), fontWeight: FontWeight.w500))),
+          Expanded(child: Text('Replying to $name', style: const TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.primary, fontWeight: FontWeight.w500))),
           IconButton(
-            icon: const Icon(Icons.close, size: 20, color: Color(0xFF0052CC)),
+            icon: const Icon(Icons.close, size: 20, color: AppTheme.primary),
             onPressed: () => setState(() => _replyToCommentId = null),
-            padding: EdgeInsets.zero,
+            padding: AppTheme.paddingZero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
@@ -1982,8 +1982,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildParentCard() {
     if (_loadingParent) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+        padding: AppTheme.paddingVertical12,
+        child: SizedBox(height: AppTheme.height44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))),
       );
     }
     final parent = _parentIssue ?? _issue?.fields.parent;
@@ -1997,10 +1997,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         onTap: () => _navigateToIssue(key),
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: AppTheme.paddingLg,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFDFE1E6)),
+            border: Border.all(color: const AppTheme.border),
           ),
           child: Row(
             children: [
@@ -2010,13 +2010,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(key, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF0052CC), fontSize: 14)),
+                    Text(key, style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.primary, fontSize: AppTheme.fontSizeBase)),
                     if (summary.isNotEmpty)
-                      Text(summary, style: const TextStyle(fontSize: 13, color: Color(0xFF5E6C84)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(summary, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Color(0xFF5E6C84)),
+              const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
             ],
           ),
         ),
@@ -2028,21 +2028,21 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildSubtasksSection() {
     if (_loadingSubtasks) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+        padding: AppTheme.paddingVertical12,
+        child: SizedBox(height: AppTheme.height44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))),
       );
     }
     if (_subtasks.isEmpty) {
       return const Padding(
-        padding: EdgeInsets.only(top: 4),
-        child: Text('No subtasks.', style: TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+        padding: AppTheme.paddingTop4,
+        child: Text('No subtasks.', style: TextStyle(color: AppTheme.textSecondary, fontSize: AppTheme.fontSizeBase)),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: _subtasks.map((issue) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: AppTheme.paddingBottom8,
           child: Material(
             color: AppTheme.white,
             borderRadius: BorderRadius.circular(12),
@@ -2069,20 +2069,20 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           ),
                           child: Text(
                             issue.fields.status.name,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeXs, fontWeight: FontWeight.w600),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppTheme.widthMd),
                         Expanded(
-                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.primary, fontSize: AppTheme.fontSizeMd), overflow: TextOverflow.ellipsis),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                        const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(issue.fields.summary, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
                     if (issue.fields.assignee != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppTheme.heightLg),
                       _userTile(issue.fields.assignee!, radius: 10),
                     ],
                   ],
@@ -2099,21 +2099,21 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildEpicChildrenSection() {
     if (_loadingEpicChildren) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+        padding: AppTheme.paddingVertical12,
+        child: SizedBox(height: AppTheme.height44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))),
       );
     }
     if (_epicChildren.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(AppLocalizations.of(context).noIssuesInThisEpic, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+        padding: AppTheme.paddingTop4,
+        child: Text(AppLocalizations.of(context).noIssuesInThisEpic, style: const TextStyle(color: AppTheme.textSecondary, fontSize: AppTheme.fontSizeBase)),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: _epicChildren.map((issue) {
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: AppTheme.paddingBottom8,
           child: Material(
             color: AppTheme.white,
             borderRadius: BorderRadius.circular(12),
@@ -2140,20 +2140,20 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           ),
                           child: Text(
                             issue.fields.status.name,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeXs, fontWeight: FontWeight.w600),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppTheme.widthMd),
                         Expanded(
-                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.primary, fontSize: AppTheme.fontSizeMd), overflow: TextOverflow.ellipsis),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                        const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(issue.fields.summary, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
                     if (issue.fields.assignee != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppTheme.heightLg),
                       _userTile(issue.fields.assignee!, radius: 10),
                     ],
                   ],
@@ -2171,8 +2171,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final links = _issue?.fields.issuelinks ?? [];
     if (links.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+        padding: AppTheme.paddingTop4,
+        child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: const TextStyle(color: AppTheme.textSecondary, fontSize: AppTheme.fontSizeBase)),
       );
     }
     return Column(
@@ -2180,7 +2180,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       children: links.map((link) {
         final issue = link.linkedIssue;
         return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
+          padding: AppTheme.paddingBottom8,
           child: Material(
             color: AppTheme.white,
             borderRadius: BorderRadius.circular(12),
@@ -2202,23 +2202,23 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEBECF0),
+                            color: AppTheme.surfaceVeryLight,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             link.directionLabel,
-                            style: const TextStyle(fontSize: 11, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500),
+                            style: const TextStyle(fontSize: AppTheme.fontSizeXs, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppTheme.widthMd),
                         Expanded(
-                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.primary, fontSize: AppTheme.fontSizeMd), overflow: TextOverflow.ellipsis),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                        const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(issue.fields.summary, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -2230,11 +2230,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           ),
                           child: Text(
                             issue.fields.status.name,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                            style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeXs, fontWeight: FontWeight.w600),
                           ),
                         ),
                         if (issue.fields.assignee != null) ...[
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppTheme.widthMd),
                           _userTile(issue.fields.assignee!, radius: 10),
                         ],
                       ],
@@ -2253,8 +2253,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildConfluenceSection() {
     if (_loadingConfluenceLinks) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+        padding: AppTheme.paddingVertical12,
+        child: SizedBox(height: AppTheme.height44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))),
       );
     }
     return Column(
@@ -2262,14 +2262,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       children: [
         if (_confluenceLinks.isEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(AppLocalizations.of(context).noConfluencePagesLinked, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+            padding: AppTheme.paddingTop4,
+            child: Text(AppLocalizations.of(context).noConfluencePagesLinked, style: const TextStyle(color: AppTheme.textSecondary, fontSize: AppTheme.fontSizeBase)),
           )
         else
           ..._confluenceLinks.map((link) {
             final isDeleting = _deletingConfluenceLinkId == link.id;
             return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: AppTheme.paddingBottom8,
               child: Material(
                 color: AppTheme.white,
                 borderRadius: BorderRadius.circular(12),
@@ -2291,16 +2291,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.article_outlined, color: Color(0xFF0052CC), size: 22),
-                            const SizedBox(width: 12),
+                            const Icon(Icons.article_outlined, color: AppTheme.primary, size: 22),
+                            const SizedBox(width: AppTheme.widthLg),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Text(link.title.isNotEmpty ? link.title : 'Confluence Page', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF172B4D), fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  Text(link.title.isNotEmpty ? link.title : 'Confluence Page', style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textPrimary, fontSize: AppTheme.fontSizeMd), maxLines: 2, overflow: TextOverflow.ellipsis),
                                   if (link.url.isNotEmpty) ...[
                                     const SizedBox(height: 4),
-                                    Text(link.url, style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                    Text(link.url, style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
                                   ],
                                 ],
                               ),
@@ -2315,17 +2315,17 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           children: [
                             if (!isDeleting && link.url.isNotEmpty)
                               TextButton.icon(
-                                icon: const Icon(Icons.open_in_new, size: 18, color: Color(0xFF0052CC)),
-                                label: Text(AppLocalizations.of(context).openExternally, style: const TextStyle(fontSize: 13)),
+                                icon: const Icon(Icons.open_in_new, size: 18, color: AppTheme.primary),
+                                label: Text(AppLocalizations.of(context).openExternally, style: const TextStyle(fontSize: AppTheme.fontSizeMd)),
                                 onPressed: () => url_launcher.launchUrl(Uri.parse(link.url), mode: url_launcher.LaunchMode.externalApplication),
                               ),
                             TextButton.icon(
                               icon: isDeleting
-                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))
-                                  : const Icon(Icons.link_off, size: 18, color: Color(0xFF5E6C84)),
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                                  : const Icon(Icons.link_off, size: 18, color: AppTheme.textSecondary),
                               label: Text(
                                 AppLocalizations.of(context).removeConfluenceLink,
-                                style: const TextStyle(fontSize: 13, color: Color(0xFF5E6C84)),
+                                style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textSecondary),
                               ),
                               onPressed: isDeleting ? null : () => _confirmRemoveConfluenceLink(link.id),
                             ),
@@ -2360,13 +2360,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       builder: (ctx) {
         return Dialog(
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: AppTheme.padding20,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(AppLocalizations.of(ctx).linkConfluencePage, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 16),
+                Text(AppLocalizations.of(ctx).linkConfluencePage, style: const TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w700)),
+                const SizedBox(height: AppTheme.heightXxxl),
                 TextField(
                   controller: urlController,
                   decoration: InputDecoration(
@@ -2377,7 +2377,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   maxLines: 1,
                   autofocus: true,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppTheme.heightXxl),
                 TextField(
                   controller: titleController,
                   decoration: InputDecoration(
@@ -2394,7 +2394,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       onPressed: () => Navigator.of(ctx).pop(false),
                       child: Text(AppLocalizations.of(ctx).cancel),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppTheme.widthMd),
                     FilledButton(
                       onPressed: () async {
                         final url = urlController.text.trim();
@@ -2822,14 +2822,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         parentIdMap.putIfAbsent(pid, () => []).add(c);
       }
     }
+    // Sort replies by newest first (descending)
     for (final ls in parentIdMap.values) {
-      ls.sort((a, b) => (a['created']?.toString() ?? '').compareTo(b['created']?.toString() ?? ''));
+      ls.sort((a, b) => (b['created']?.toString() ?? '').compareTo(a['created']?.toString() ?? ''));
     }
     final roots = list.where((c) {
       final pid = _parentCommentId(c);
       return pid == null || pid.isEmpty;
     }).toList();
-    roots.sort((a, b) => (a['created']?.toString() ?? '').compareTo(b['created']?.toString() ?? ''));
+    // Sort root comments by newest first (descending)
+    roots.sort((a, b) => (b['created']?.toString() ?? '').compareTo(a['created']?.toString() ?? ''));
     return roots.expand((root) => _commentCardWithReplies(root, 0, parentIdMap)).toList();
   }
 
@@ -2853,10 +2855,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final isOwnComment = _currentUser != null && author != null && _currentUser!.accountId == author.accountId;
     final attachments = _issue?.fields.attachment ?? [];
     final card = Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFFF4F5F7),
+      margin: EdgeInsets.only(bottom: AppTheme.heightXxl),
+      color: AppTheme.surfaceMuted,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: AppTheme.paddingLg,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2864,28 +2866,28 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFF0052CC),
+                  backgroundColor: AppTheme.primary,
                   backgroundImage: author?.avatar48 != null ? NetworkImage(author!.avatar48!) : null,
                   child: author?.avatar48 == null
                       ? Text(
                           authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                          style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.bold),
                         )
                       : null,
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppTheme.widthMd),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(authorName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF172B4D))),
-                      Text(_formatRelativeDate(created), style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A))),
+                      Text(authorName, style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                      Text(_formatRelativeDate(created), style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textMutedSecondary)),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppTheme.heightLg),
             _CommentBodyWidget(
               body: body,
               attachments: attachments,
@@ -2895,7 +2897,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               onMentionPress: _onMentionPress,
             ),
             if (commentId != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppTheme.heightXxl),
               Wrap(
                 spacing: 8,
                 runSpacing: 4,
@@ -2905,7 +2907,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     icon: const Icon(Icons.reply, size: 18),
                     label: const Text('Reply'),
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF42526E),
+                      foregroundColor: AppTheme.textComment,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
@@ -2914,7 +2916,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     icon: const Icon(Icons.ios_share, size: 18),
                     label: const Text('Share'),
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF42526E),
+                      foregroundColor: AppTheme.textComment,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
@@ -2924,7 +2926,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       icon: const Icon(Icons.edit, size: 18),
                       label: const Text('Edit'),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF42526E),
+                        foregroundColor: AppTheme.textComment,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
@@ -2933,7 +2935,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       icon: const Icon(Icons.delete_outline, size: 18),
                       label: const Text('Delete'),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF5630),
+                        foregroundColor: AppTheme.deleteAction,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
@@ -3197,7 +3199,7 @@ class _CommentBodyWidget extends StatelessWidget {
       final wikiMatches = wikiPattern.allMatches(bodyText);
       
       if (customMatches.isEmpty && wikiMatches.isEmpty) {
-        return _LinkableText(bodyText, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+        return _LinkableText(bodyText, style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment));
       }
       
       // Combine all matches and sort by position
@@ -3231,7 +3233,7 @@ class _CommentBodyWidget extends StatelessWidget {
         if (start > lastEnd) {
           final segment = bodyText.substring(lastEnd, start);
           if (segment.isNotEmpty) {
-            widgets.add(_LinkableText(segment, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E))));
+            widgets.add(_LinkableText(segment, style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment)));
           }
         }
         
@@ -3254,7 +3256,7 @@ class _CommentBodyWidget extends StatelessWidget {
         final isImage = att.mimeType.startsWith('image/');
         if (isImage && onNeedLoadImage != null) {
           widgets.add(Padding(
-            padding: const EdgeInsets.only(right: 8, bottom: 4),
+            padding: AppTheme.paddingRight8Bottom4,
             child: _InlineCommentThumbnail(
               attachment: att,
               loadedBytes: loadedImageBytes?[att.id],
@@ -3264,19 +3266,19 @@ class _CommentBodyWidget extends StatelessWidget {
           ));
         } else {
           widgets.add(Padding(
-            padding: const EdgeInsets.only(right: 8),
+            padding: AppTheme.paddingRight8,
             child: InkWell(
               onTap: () => onAttachmentPress(att),
               borderRadius: BorderRadius.circular(4),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFFF4F5F7), borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(color: AppTheme.surfaceMuted, borderRadius: BorderRadius.circular(4)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 16)),
+                    Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: AppTheme.fontSizeLg)),
                     const SizedBox(width: 4),
-                    Text(att.filename, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(att.filename, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.primary, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -3290,7 +3292,7 @@ class _CommentBodyWidget extends StatelessWidget {
       if (lastEnd < bodyText.length) {
         final segment = bodyText.substring(lastEnd);
         if (segment.isNotEmpty) {
-          widgets.add(_LinkableText(segment, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E))));
+          widgets.add(_LinkableText(segment, style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment)));
         }
       }
       
@@ -3304,7 +3306,7 @@ class _CommentBodyWidget extends StatelessWidget {
     if (body is Map) {
       final content = body['content'];
       if (content is! List || content.isEmpty) {
-        return _LinkableText(_plainText(body), style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+        return _LinkableText(_plainText(body), style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment));
       }
       final children = <Widget>[];
       for (final node in content) {
@@ -3325,7 +3327,7 @@ class _CommentBodyWidget extends StatelessWidget {
                   final href = (linkMark['attrs'] as Map)['href']?.toString();
                   if (href != null && href.isNotEmpty) {
                     row.add(Padding(
-                      padding: const EdgeInsets.only(right: 4),
+                      padding: AppTheme.paddingRight4,
                       child: InkWell(
                         onTap: () async {
                           final uri = Uri.tryParse(href);
@@ -3336,20 +3338,20 @@ class _CommentBodyWidget extends StatelessWidget {
                         borderRadius: BorderRadius.circular(2),
                         child: Text(
                           text.isEmpty ? href : text,
-                          style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF0052CC), decoration: TextDecoration.underline),
+                          style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.primary, decoration: TextDecoration.underline),
                         ),
                       ),
                     ));
                     continue;
                   }
                 }
-                TextStyle textStyle = const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E));
+                TextStyle textStyle = const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment);
                 if (marks != null) {
                   for (final m in marks) {
                     if (m is Map) {
                       if (m['type'] == 'strong') textStyle = textStyle.copyWith(fontWeight: FontWeight.bold);
                       else if (m['type'] == 'em') textStyle = textStyle.copyWith(fontStyle: FontStyle.italic);
-                      else if (m['type'] == 'code') textStyle = textStyle.copyWith(fontFamily: 'monospace', backgroundColor: const Color(0xFFF4F5F7));
+                      else if (m['type'] == 'code') textStyle = textStyle.copyWith(fontFamily: 'monospace', backgroundColor: AppTheme.surfaceMuted);
                     }
                   }
                 }
@@ -3369,17 +3371,17 @@ class _CommentBodyWidget extends StatelessWidget {
                 final chip = Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE6FCFF),
+                    color: AppTheme.surfaceLightBlue,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFFB3D4FF), width: 1),
+                    border: Border.all(color: AppTheme.borderLightBlue, width: 1),
                   ),
                   child: Text(
                     displayName,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500),
+                    style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.primary, fontWeight: FontWeight.w500),
                   ),
                 );
                 row.add(Padding(
-                  padding: const EdgeInsets.only(right: 4),
+                  padding: AppTheme.paddingRight4,
                   child: onMentionPress != null && accountId.isNotEmpty
                       ? InkWell(
                           onTap: () => onMentionPress?.call(accountId, displayName.replaceFirst('@', '').trim()),
@@ -3392,7 +3394,7 @@ class _CommentBodyWidget extends StatelessWidget {
                 final url = (item['attrs'] is Map) ? (item['attrs'] as Map)['url']?.toString() : null;
                 if (url != null) {
                   row.add(Padding(
-                    padding: const EdgeInsets.only(right: 4),
+                    padding: AppTheme.paddingRight4,
                     child: InkWell(
                       onTap: () async {
                         final uri = Uri.tryParse(url);
@@ -3401,7 +3403,7 @@ class _CommentBodyWidget extends StatelessWidget {
                         }
                       },
                       borderRadius: BorderRadius.circular(2),
-                      child: Text(url, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF0052CC), decoration: TextDecoration.underline)),
+                      child: Text(url, style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.primary, decoration: TextDecoration.underline)),
                     ),
                   ));
                 }
@@ -3414,7 +3416,7 @@ class _CommentBodyWidget extends StatelessWidget {
                   final onLoad = onNeedLoadImage;
                   if (isImage && onLoad != null) {
                     row.add(Padding(
-                      padding: const EdgeInsets.only(right: 8, bottom: 4),
+                      padding: AppTheme.paddingRight8Bottom4,
                       child: _InlineCommentThumbnail(
                         attachment: att,
                         loadedBytes: bytes[att.id],
@@ -3424,19 +3426,19 @@ class _CommentBodyWidget extends StatelessWidget {
                     ));
                   } else {
                     row.add(Padding(
-                      padding: const EdgeInsets.only(right: 8),
+                      padding: AppTheme.paddingRight8,
                       child: InkWell(
                         onTap: () => onAttachmentPress(att),
                         borderRadius: BorderRadius.circular(4),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: const Color(0xFFF4F5F7), borderRadius: BorderRadius.circular(4)),
+                          decoration: BoxDecoration(color: AppTheme.surfaceMuted, borderRadius: BorderRadius.circular(4)),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 16)),
+                              Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: AppTheme.fontSizeLg)),
                               const SizedBox(width: 4),
-                              Text(att.filename, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              Text(att.filename, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.primary, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
                             ],
                           ),
                         ),
@@ -3448,7 +3450,7 @@ class _CommentBodyWidget extends StatelessWidget {
             }
             if (row.isNotEmpty) {
               children.add(Padding(
-                padding: const EdgeInsets.only(bottom: 4),
+                padding: AppTheme.paddingBottom4,
                 child: Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 0,
@@ -3461,8 +3463,8 @@ class _CommentBodyWidget extends StatelessWidget {
             final text = _plainText(paragraphContent is List ? {'content': paragraphContent} : node);
             if (text.isNotEmpty) {
               children.add(Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: _LinkableText(text, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E))),
+                padding: AppTheme.paddingBottom4,
+                child: _LinkableText(text, style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment)),
               ));
             }
           }
@@ -3477,7 +3479,7 @@ class _CommentBodyWidget extends StatelessWidget {
             if (att != null) {
               if (onLoad != null && att.mimeType.startsWith('image/')) {
                 children.add(Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  padding: AppTheme.paddingTop8Bottom4,
                   child: _InlineDescriptionMedia(
                     attachment: att,
                     loadedBytes: bytes[att.id],
@@ -3487,7 +3489,7 @@ class _CommentBodyWidget extends StatelessWidget {
                 ));
               } else {
                 children.add(Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  padding: AppTheme.paddingTop8Bottom4,
                   child: InkWell(
                     onTap: () => onAttachmentPress(att),
                     borderRadius: BorderRadius.circular(6),
@@ -3500,15 +3502,15 @@ class _CommentBodyWidget extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 32)),
-                          const SizedBox(width: 12),
+                          Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: AppTheme.fontSizeXxxlMd)),
+                          const SizedBox(width: AppTheme.widthLg),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(att.filename, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF172B4D)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                Text(att.filename, style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w500, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                                 if (att.size != null)
-                                  Text('${(att.size! / 1024).toStringAsFixed(1)} KB', style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A))),
+                                  Text('${(att.size! / 1024).toStringAsFixed(1)} KB', style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textMutedSecondary)),
                               ],
                             ),
                           ),
@@ -3531,7 +3533,7 @@ class _CommentBodyWidget extends StatelessWidget {
             if (att != null) {
               if (onLoad != null && att.mimeType.startsWith('image/')) {
                 group.add(Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 8),
+                  padding: AppTheme.paddingRight8Bottom8,
                   child: _InlineDescriptionMedia(
                     attachment: att,
                     loadedBytes: bytes[att.id],
@@ -3541,7 +3543,7 @@ class _CommentBodyWidget extends StatelessWidget {
                 ));
               } else {
                 group.add(Padding(
-                  padding: const EdgeInsets.only(right: 8, bottom: 8),
+                  padding: AppTheme.paddingRight8Bottom8,
                   child: InkWell(
                     onTap: () => onAttachmentPress(att),
                     borderRadius: BorderRadius.circular(6),
@@ -3555,9 +3557,9 @@ class _CommentBodyWidget extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: 24)),
-                          const SizedBox(width: 8),
-                          Text(att.filename, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text(_fileIcon(att.mimeType), style: const TextStyle(fontSize: AppTheme.fontSizeXxlLg)),
+                          const SizedBox(width: AppTheme.widthMd),
+                          Text(att.filename, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                         ],
                       ),
                     ),
@@ -3568,30 +3570,30 @@ class _CommentBodyWidget extends StatelessWidget {
           }
           if (group.isNotEmpty) {
             children.add(Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 8),
+              padding: AppTheme.paddingTop8Bottom8,
               child: Wrap(children: group),
             ));
           }
         } else if (type == 'codeBlock' && node['content'] is List) {
           final code = (node['content'] as List).map((c) => _plainText(c)).join('');
           children.add(Container(
-            margin: const EdgeInsets.only(top: 4, bottom: 4),
+            margin: AppTheme.paddingTop4Bottom4,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF4F5F7),
+              color: AppTheme.surfaceMuted,
               borderRadius: BorderRadius.circular(4),
-              border: Border(left: BorderSide(color: const Color(0xFFDFE1E6), width: 3)),
+              border: Border(left: BorderSide(color: const AppTheme.border, width: 3)),
             ),
-            child: SelectableText(code, style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: Color(0xFF172B4D))),
+            child: SelectableText(code, style: const TextStyle(fontSize: AppTheme.fontSizeSm, fontFamily: 'monospace', color: AppTheme.textPrimary)),
           ));
         }
       }
       if (children.isEmpty) {
-        return _LinkableText(_plainText(body), style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+        return _LinkableText(_plainText(body), style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment));
       }
       return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children);
     }
-    return _LinkableText(_plainText(body), style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+    return _LinkableText(_plainText(body), style: const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment));
   }
 }
 
@@ -3800,14 +3802,14 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
                         ? InteractiveViewer(child: Image.memory(bytes, fit: BoxFit.contain))
                         : const CircularProgressIndicator(color: Colors.white))
                     : Padding(
-                        padding: const EdgeInsets.all(24),
+                        padding: AppTheme.paddingXl,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(_fileIconForEdit(att.mimeType), style: const TextStyle(fontSize: 48)),
-                            const SizedBox(height: 16),
-                            Text(att.filename, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16), maxLines: 2, overflow: TextOverflow.ellipsis),
-                            const SizedBox(height: 24),
+                            Text(_fileIconForEdit(att.mimeType), style: const TextStyle(fontSize: AppTheme.fontSizeHuge)),
+                            const SizedBox(height: AppTheme.heightXxxl),
+                            Text(att.filename, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: AppTheme.fontSizeLg), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            const SizedBox(height: AppTheme.heightXxxxxl),
                             FilledButton.icon(
                               onPressed: () async {
                                 final api = context.read<JiraApiService>();
@@ -3865,18 +3867,18 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
           Container(
             width: double.infinity,
             constraints: const BoxConstraints(maxHeight: 220),
-            color: const Color(0xFFF4F5F7),
+            color: AppTheme.surfaceMuted,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Text('Preview', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: const Color(0xFF5E6C84), fontWeight: FontWeight.w600)),
+                  padding: AppTheme.paddingFromLTRB16_12_16_8,
+                  child: Text('Preview', style: Theme.of(context).textTheme.titleSmall?.copyWith(color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
                 ),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    padding: AppTheme.paddingFromLTRB16_0_16_12,
                     child: _DescriptionBodyWidget(
                       description: widget.initialDescription,
                       attachments: widget.attachments,
@@ -3932,7 +3934,7 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
                     controller: _controller,
                     config: quill.QuillEditorConfig(
                       placeholder: 'Add description...',
-                      padding: const EdgeInsets.all(16),
+                      padding: AppTheme.paddingLg,
                     ),
                     focusNode: _focusNode,
                     scrollController: _scrollController,
@@ -3942,7 +3944,7 @@ class _DescriptionEditPageState extends State<_DescriptionEditPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: const BoxDecoration(
-                    border: Border(top: BorderSide(color: Color(0xFFDFE1E6), width: 1)),
+                    border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
                   ),
                   child: AttachmentUploadWidget(
                     issueKey: widget.issueKey,
@@ -4021,7 +4023,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
   }
 
   Widget _renderInlineContent(List<dynamic> content, [TextStyle? baseStyle]) {
-    final style = baseStyle ?? const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E));
+    final style = baseStyle ?? const TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5, color: AppTheme.textComment);
     final row = <Widget>[];
     for (var i = 0; i < content.length; i++) {
       final item = content[i];
@@ -4035,7 +4037,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
           final href = (linkMark['attrs'] as Map)['href']?.toString();
           if (href != null && href.isNotEmpty) {
             row.add(Padding(
-              padding: const EdgeInsets.only(right: 4),
+                    padding: AppTheme.paddingRight4,
               child: InkWell(
                 onTap: () async {
                   final uri = Uri.tryParse(href);
@@ -4044,7 +4046,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
                   }
                 },
                 borderRadius: BorderRadius.circular(2),
-                child: Text(text.isEmpty ? href : text, style: style.copyWith(color: const Color(0xFF0052CC), decoration: TextDecoration.underline)),
+                child: Text(text.isEmpty ? href : text, style: style.copyWith(color: AppTheme.primary, decoration: TextDecoration.underline)),
               ),
             ));
             continue;
@@ -4056,7 +4058,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
             if (m is Map) {
               if (m['type'] == 'strong') s = s.copyWith(fontWeight: FontWeight.bold);
               else if (m['type'] == 'em') s = s.copyWith(fontStyle: FontStyle.italic);
-              else if (m['type'] == 'code') s = s.copyWith(fontFamily: 'monospace', backgroundColor: const Color(0xFFF4F5F7));
+              else if (m['type'] == 'code') s = s.copyWith(fontFamily: 'monospace', backgroundColor: AppTheme.surfaceMuted);
             }
           }
         }
@@ -4065,22 +4067,22 @@ class _DescriptionBodyWidget extends StatelessWidget {
         final displayName = _mentionText(item);
         final name = displayName.startsWith('@') ? displayName : '@$displayName';
         row.add(Padding(
-          padding: const EdgeInsets.only(right: 4),
+                    padding: AppTheme.paddingRight4,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFE6FCFF),
+              color: AppTheme.surfaceLightBlue,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFFB3D4FF), width: 1),
+              border: Border.all(color: AppTheme.borderLightBlue, width: 1),
             ),
-            child: Text(name, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500)),
+            child: Text(name, style: const TextStyle(fontSize: AppTheme.fontSizeMd, color: AppTheme.primary, fontWeight: FontWeight.w500)),
           ),
         ));
       } else if (itemType == 'inlineCard') {
         final url = (item['attrs'] is Map) ? (item['attrs'] as Map)['url']?.toString() : null;
         if (url != null) {
           row.add(Padding(
-            padding: const EdgeInsets.only(right: 4),
+                    padding: AppTheme.paddingRight4,
             child: InkWell(
               onTap: () async {
                 final uri = Uri.tryParse(url);
@@ -4089,12 +4091,12 @@ class _DescriptionBodyWidget extends StatelessWidget {
                 }
               },
               borderRadius: BorderRadius.circular(2),
-              child: Text(url, style: style.copyWith(color: const Color(0xFF0052CC), decoration: TextDecoration.underline)),
+              child: Text(url, style: style.copyWith(color: AppTheme.primary, decoration: TextDecoration.underline)),
             ),
           ));
         }
       } else if (itemType == 'hardBreak') {
-        row.add(const Text('\n', style: TextStyle(fontSize: 14, height: 1.5)));
+        row.add(const Text('\n', style: TextStyle(fontSize: AppTheme.fontSizeBase, height: 1.5)));
       }
     }
     if (row.isEmpty) return const SizedBox.shrink();
@@ -4116,17 +4118,17 @@ class _DescriptionBodyWidget extends StatelessWidget {
         for (final node in itemContent) {
           if (node is Map && node['type'] == 'paragraph' && node['content'] != null) {
             items.add(Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: AppTheme.paddingBottom4,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: 24, child: Text(bullet, style: const TextStyle(fontSize: 14, color: Color(0xFF42526E)))),
+                  SizedBox(width: 24, child: Text(bullet, style: const TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.textComment))),
                   Expanded(child: _renderInlineContent(node['content'] as List)),
                 ],
               ),
             ));
           } else if (node is Map && (node['type'] == 'bulletList' || node['type'] == 'orderedList')) {
-            items.add(Padding(padding: const EdgeInsets.only(left: 20), child: _renderList(node, i)));
+            items.add(Padding(padding: AppTheme.paddingLeft20, child: _renderList(node, i)));
           }
         }
       }
@@ -4137,19 +4139,19 @@ class _DescriptionBodyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (description == null) {
-      return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
+      return const Text('No description', style: TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textMutedAlt, height: 1.5));
     }
     if (description is String) {
       final s = (description as String).trim();
-      if (s.isEmpty) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
-      return _LinkableText(s, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5));
+      if (s.isEmpty) return const Text('No description', style: TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textMutedAlt, height: 1.5));
+      return _LinkableText(s, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, height: 1.5));
     }
-    if (description is! Map) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
+    if (description is! Map) return const Text('No description', style: TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textMutedAlt, height: 1.5));
     final content = description['content'];
     if (content is! List || content.isEmpty) {
       final plain = _plainText(description);
-      if (plain.trim().isEmpty) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
-      return _LinkableText(plain, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5));
+      if (plain.trim().isEmpty) return const Text('No description', style: TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textMutedAlt, height: 1.5));
+      return _LinkableText(plain, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, height: 1.5));
     }
     final children = <Widget>[];
     for (final node in content) {
@@ -4159,43 +4161,43 @@ class _DescriptionBodyWidget extends StatelessWidget {
         final paragraphContent = node['content'];
         if (paragraphContent is List && paragraphContent.isNotEmpty) {
           children.add(Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: AppTheme.paddingBottom8,
             child: _renderInlineContent(paragraphContent),
           ));
         } else {
           final text = _plainText(paragraphContent is List ? {'content': paragraphContent} : node);
           if (text.isNotEmpty) {
             children.add(Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _LinkableText(text, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5)),
+              padding: AppTheme.paddingBottom8,
+              child: _LinkableText(text, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, height: 1.5)),
             ));
           }
         }
       } else if (type == 'heading' && node['content'] is List) {
         final level = (node['attrs'] is Map) ? intFromJson((node['attrs'] as Map)['level']) ?? 1 : 1;
-        TextStyle headingStyle = const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF172B4D));
-        if (level == 1) headingStyle = headingStyle.copyWith(fontSize: 24);
-        else if (level == 2) headingStyle = headingStyle.copyWith(fontSize: 20);
-        else if (level == 3) headingStyle = headingStyle.copyWith(fontSize: 18);
-        else if (level == 4) headingStyle = headingStyle.copyWith(fontSize: 16);
-        else headingStyle = headingStyle.copyWith(fontSize: 14);
+        TextStyle headingStyle = const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textPrimary);
+        if (level == 1) headingStyle = headingStyle.copyWith(fontSize: AppTheme.fontSizeXxlLg);
+        else if (level == 2) headingStyle = headingStyle.copyWith(fontSize: AppTheme.fontSizeXlMd);
+        else if (level == 3) headingStyle = headingStyle.copyWith(fontSize: AppTheme.fontSizeXl);
+        else if (level == 4) headingStyle = headingStyle.copyWith(fontSize: AppTheme.fontSizeLg);
+        else headingStyle = headingStyle.copyWith(fontSize: AppTheme.fontSizeBase);
         children.add(Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 8),
+          padding: AppTheme.paddingTop12Bottom8,
           child: _renderInlineContent(node['content'] as List, headingStyle),
         ));
       } else if (type == 'bulletList' || type == 'orderedList') {
-        children.add(Padding(padding: const EdgeInsets.only(bottom: 8), child: _renderList(node, 0)));
+        children.add(Padding(padding: AppTheme.paddingBottom8, child: _renderList(node, 0)));
       } else if (type == 'codeBlock' && node['content'] is List) {
         final code = (node['content'] as List).map((c) => _plainText(c)).join('');
         children.add(Container(
-          margin: const EdgeInsets.only(top: 4, bottom: 8),
+          margin: EdgeInsets.only(top: AppTheme.height4, bottom: AppTheme.heightLg),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF4F5F7),
+            color: AppTheme.surfaceMuted,
             borderRadius: BorderRadius.circular(4),
-            border: const Border(left: BorderSide(color: Color(0xFFDFE1E6), width: 3)),
+            border: const Border(left: BorderSide(color: AppTheme.border, width: 3)),
           ),
-          child: SelectableText(code, style: const TextStyle(fontSize: 13, fontFamily: 'monospace', color: Color(0xFF172B4D))),
+          child: SelectableText(code, style: const TextStyle(fontSize: AppTheme.fontSizeMd, fontFamily: 'monospace', color: AppTheme.textPrimary)),
         ));
       } else if (type == 'mediaSingle' && node['content'] is List) {
         for (final media in node['content'] as List) {
@@ -4207,7 +4209,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
           final attachment = att;
           if (attachment != null) {
             children.add(Padding(
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              padding: AppTheme.paddingTop12Bottom8,
               child: _InlineDescriptionMedia(
                 attachment: attachment,
                 loadedBytes: loadedImageBytes[attachment.id],
@@ -4228,7 +4230,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
           final attachment = att;
           if (attachment != null) {
             group.add(Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 8),
+              padding: AppTheme.paddingRight8Bottom8,
               child: _InlineDescriptionMedia(
                 attachment: attachment,
                 loadedBytes: loadedImageBytes[attachment.id],
@@ -4240,7 +4242,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
         }
         if (group.isNotEmpty) {
           children.add(Padding(
-            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            padding: AppTheme.paddingTop8Bottom8,
             child: Wrap(children: group),
           ));
         }
@@ -4248,8 +4250,8 @@ class _DescriptionBodyWidget extends StatelessWidget {
     }
     if (children.isEmpty) {
       final plain = _plainText(description);
-      if (plain.trim().isEmpty) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
-      return _LinkableText(plain, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5));
+      if (plain.trim().isEmpty) return const Text('No description', style: TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textMutedAlt, height: 1.5));
+      return _LinkableText(plain, style: const TextStyle(fontSize: AppTheme.fontSizeBaseLg, color: AppTheme.textPrimary, height: 1.5));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children);
   }
@@ -4306,9 +4308,9 @@ class _InlineCommentThumbnailState extends State<_InlineCommentThumbnail> {
           width: size,
           height: size,
           decoration: BoxDecoration(
-            color: const Color(0xFFF4F5F7),
+            color: AppTheme.surfaceMuted,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFDFE1E6)),
+            border: Border.all(color: const AppTheme.border),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(6),
@@ -4318,7 +4320,7 @@ class _InlineCommentThumbnailState extends State<_InlineCommentThumbnail> {
                     child: SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary),
                     ),
                   ),
           ),
@@ -4379,36 +4381,36 @@ class _InlineDescriptionMediaState extends State<_InlineDescriptionMedia> {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFF4F5F7),
+            color: AppTheme.surfaceMuted,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFDFE1E6)),
+            border: Border.all(color: const AppTheme.border),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: isImage
                 ? SizedBox(
                     width: double.infinity,
-                    height: 200,
+                    height: AppTheme.height200,
                     child: widget.loadedBytes != null
                         ? Image.memory(widget.loadedBytes!, fit: BoxFit.contain)
                         : Stack(
                             alignment: Alignment.center,
                             children: [
-                              const Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))),
+                              const Center(child: CircularProgressIndicator(color: AppTheme.primary)),
                             ],
                           ),
                   )
                 : isVideo
                     ? Padding(
-                        padding: const EdgeInsets.all(20),
+                        padding: AppTheme.padding20,
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('🎥', style: TextStyle(fontSize: 40)),
-                            const SizedBox(height: 8),
-                            Text(att.filename, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF172B4D)), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            const Text('🎥', style: TextStyle(fontSize: AppTheme.fontSizeXxxlLg)),
+                            const SizedBox(height: AppTheme.heightLg),
+                            Text(att.filename, style: const TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w500, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                             const SizedBox(height: 4),
-                            const Text('Tap to play', style: TextStyle(fontSize: 12, color: Color(0xFF7A869A))),
+                            const Text('Tap to play', style: TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textMutedSecondary)),
                           ],
                         ),
                       )
@@ -4416,9 +4418,9 @@ class _InlineDescriptionMediaState extends State<_InlineDescriptionMedia> {
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            const Text('📎', style: TextStyle(fontSize: 24)),
-                            const SizedBox(width: 12),
-                            Expanded(child: Text(att.filename, style: const TextStyle(fontSize: 14, color: Color(0xFF172B4D)), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                            const Text('📎', style: TextStyle(fontSize: AppTheme.fontSizeXxlLg)),
+                            const SizedBox(width: AppTheme.widthLg),
+                            Expanded(child: Text(att.filename, style: const TextStyle(fontSize: AppTheme.fontSizeBase, color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis)),
                           ],
                         ),
                       ),
@@ -4457,7 +4459,7 @@ class _LinkableText extends StatelessWidget {
         style: (style.copyWith(
           color: AppTheme.primary,
           decoration: TextDecoration.underline,
-          decorationColor: const Color(0xFF0052CC),
+          decorationColor: AppTheme.primary,
         )),
         recognizer: TapGestureRecognizer()
           ..onTap = () async {
@@ -4733,7 +4735,7 @@ class _CommentEditDialogState extends State<_CommentEditDialog> {
                       controller: _controller,
                       config: quill.QuillEditorConfig(
                         placeholder: 'Edit comment...',
-                        padding: const EdgeInsets.all(16),
+                        padding: AppTheme.paddingLg,
                       ),
                       focusNode: _focusNode,
                       scrollController: _scrollController,
@@ -4742,7 +4744,7 @@ class _CommentEditDialogState extends State<_CommentEditDialog> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: Color(0xFFDFE1E6), width: 1)),
+                      border: Border(top: BorderSide(color: AppTheme.border, width: 1)),
                     ),
                     child: AttachmentUploadWidget(
                       issueKey: widget.issueKey,

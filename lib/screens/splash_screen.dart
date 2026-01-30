@@ -103,8 +103,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      width: 120,
-                      height: 120,
+                      width: AppTheme.widthXxxxxxxl,
+                      height: AppTheme.heightXxxxxxxxxl,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -122,21 +122,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         color: AppTheme.primary,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppTheme.heightXxxxxl),
                     const Text(
                       AppTheme.appName,
                       style: TextStyle(
-                        fontSize: 26,
+                        fontSize: AppTheme.fontSizeXxxlXl,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                         letterSpacing: 1.0,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.heightLg),
                     Text(
                       'Track. Plan. Release.',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeBase,
                         color: Colors.white.withValues(alpha: 0.85),
                         letterSpacing: 0.8,
                       ),

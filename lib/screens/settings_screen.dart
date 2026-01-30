@@ -248,7 +248,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           width: 24,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : Text(AppLocalizations.of(context).saveChanges, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      : Text(AppLocalizations.of(context).saveChanges, style: const TextStyle(fontSize: AppTheme.fontSizeLg, fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -322,7 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Text(AppLocalizations.of(context).selectDefaultBoard, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                Text(AppLocalizations.of(context).selectDefaultBoard, style: const TextStyle(fontSize: AppTheme.fontSizeXlMd, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 IconButton(
                   onPressed: () => setState(() => _showBoardPicker = false),

@@ -165,7 +165,7 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: AppTheme.padding20,
               decoration: const BoxDecoration(
                 color: AppTheme.surfaceMuted,
                 borderRadius: BorderRadius.only(
@@ -179,7 +179,7 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                     child: Text(
                       AppLocalizations.of(context).updateSprintButton,
                       style: const TextStyle(
-                        fontSize: 20,
+                        fontSize: AppTheme.fontSizeXlMd,
                         fontWeight: FontWeight.w700,
                         color: AppTheme.textPrimary,
                       ),
@@ -196,19 +196,19 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
             ),
             Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
+                padding: AppTheme.padding20,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       AppLocalizations.of(context).sprintName,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeBase,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.heightLg),
                     TextField(
                       controller: _nameController,
                       decoration: InputDecoration(
@@ -224,22 +224,22 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+                          borderSide: const BorderSide(color: AppTheme.primary, width: AppTheme.widthXs),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        contentPadding: AppTheme.paddingHorizontal12Vertical12,
                       ),
                       enabled: !_updating,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppTheme.heightXxxxl),
                     Text(
                       AppLocalizations.of(context).goalOverview,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeBase,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.heightLg),
                     TextField(
                       controller: _goalController,
                       maxLines: 3,
@@ -256,27 +256,27 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+                          borderSide: const BorderSide(color: AppTheme.primary, width: AppTheme.widthXs),
                         ),
-                        contentPadding: const EdgeInsets.all(12),
+                        contentPadding: AppTheme.paddingMd,
                       ),
                       enabled: !_updating,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppTheme.heightXxxxl),
                     Text(
                       AppLocalizations.of(context).startDate,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeBase,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.heightLg),
                     InkWell(
                       onTap: _updating ? null : _selectStartDate,
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        padding: AppTheme.paddingHorizontal12Vertical12,
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.border),
                           borderRadius: BorderRadius.circular(8),
@@ -285,11 +285,11 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                         child: Row(
                           children: [
                             const Icon(Icons.calendar_today, size: 18, color: AppTheme.textSecondary),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: AppTheme.widthMd),
                             Text(
                               _formatDate(_startDate) ?? AppLocalizations.of(context).selectStartDate,
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: AppTheme.fontSizeBase,
                                 color: _startDate != null ? AppTheme.textPrimary : AppTheme.hint,
                               ),
                             ),
@@ -297,21 +297,21 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: AppTheme.heightXxxxl),
                     Text(
                       AppLocalizations.of(context).endDate,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeBase,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppTheme.heightLg),
                     InkWell(
                       onTap: _updating ? null : _selectEndDate,
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        padding: AppTheme.paddingHorizontal12Vertical12,
                         decoration: BoxDecoration(
                           border: Border.all(color: AppTheme.border),
                           borderRadius: BorderRadius.circular(8),
@@ -320,11 +320,11 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                         child: Row(
                           children: [
                             const Icon(Icons.calendar_today, size: 18, color: AppTheme.textSecondary),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: AppTheme.widthMd),
                             Text(
                               _formatDate(_endDate) ?? AppLocalizations.of(context).selectEndDate,
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: AppTheme.fontSizeBase,
                                 color: _endDate != null ? AppTheme.textPrimary : AppTheme.hint,
                               ),
                             ),
@@ -337,7 +337,7 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
               ),
             ),
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: AppTheme.padding20,
               decoration: const BoxDecoration(
                 color: AppTheme.surfaceMuted,
                 borderRadius: BorderRadius.only(
@@ -351,31 +351,31 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                   TextButton(
                     onPressed: _updating ? null : () => Navigator.of(context).pop(),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: AppTheme.paddingHorizontal20Vertical12,
                     ),
                     child: Text(
                       AppLocalizations.of(context).cancel,
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: AppTheme.fontSizeBase,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textSecondary,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppTheme.widthLg),
                   ElevatedButton(
                     onPressed: _updating ? null : _handleUpdate,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: AppTheme.paddingHorizontal24Vertical12,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
                     child: _updating
                         ? const SizedBox(
-                            width: 20,
-                            height: 20,
+                            width: AppTheme.widthXl,
+                            height: AppTheme.widthXl,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
@@ -384,7 +384,7 @@ class _UpdateSprintDialogState extends State<UpdateSprintDialog> {
                         : Text(
                             AppLocalizations.of(context).updateSprintButton,
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: AppTheme.fontSizeBase,
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                             ),

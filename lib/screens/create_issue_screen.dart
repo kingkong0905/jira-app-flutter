@@ -704,7 +704,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: AppTheme.paddingBottom4,
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -719,7 +719,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     return Text.rich(
       TextSpan(
         text: label,
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+        style: TextStyle(fontSize: AppTheme.fontSizeBase, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
         children: required
             ? [const TextSpan(text: ' *', style: TextStyle(color: AppTheme.error))]
             : [],
@@ -744,7 +744,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
               child: Text(
                 value,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTheme.fontSizeBase,
                   color: onTap == null ? AppTheme.textMuted : AppTheme.textPrimary,
                 ),
               ),
@@ -776,7 +776,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
             // Avatar
             if (selectedUser != null)
               Padding(
-                padding: const EdgeInsets.only(right: 12),
+                padding: AppTheme.paddingRight12,
                 child: CircleAvatar(
                   radius: 16,
                   backgroundImage: selectedUser.avatar48 != null ? NetworkImage(selectedUser.avatar48!) : null,
@@ -791,7 +791,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
               )
             else
               Padding(
-                padding: const EdgeInsets.only(right: 12),
+                padding: AppTheme.paddingRight12,
                 child: Container(
                   width: 32,
                   height: 32,
@@ -809,7 +809,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
               child: Text(
                 _getSelectedAssigneeName(),
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTheme.fontSizeBase,
                   color: AppTheme.textPrimary,
                 ),
               ),
@@ -940,7 +940,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     required Function(dynamic) onSelect,
   }) {
     return Container(
-      padding: const EdgeInsets.only(top: 16),
+      padding: AppTheme.paddingTop16,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1058,7 +1058,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
-      padding: const EdgeInsets.only(top: 16),
+      padding: AppTheme.paddingTop16,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1074,7 +1074,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                 Expanded(
                   child: Text(
                     AppLocalizations.of(context).selectAssignee,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -1171,7 +1171,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                           ),
                           title: Text(user.displayName),
                           subtitle: user.emailAddress != null
-                              ? Text(user.emailAddress!, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted))
+                              ? Text(user.emailAddress!, style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textMuted))
                               : null,
                           trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                           onTap: () {
@@ -1315,7 +1315,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
-      padding: const EdgeInsets.only(top: 16),
+      padding: AppTheme.paddingTop16,
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1331,7 +1331,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                 const Expanded(
                   child: Text(
                     'Select Parent Issue',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: AppTheme.fontSizeXl, fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -1413,7 +1413,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                           issue.fields.summary,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                          style: const TextStyle(fontSize: AppTheme.fontSizeSm, color: AppTheme.textMuted),
                         ),
                         trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
                         onTap: () {
