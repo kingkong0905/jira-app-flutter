@@ -194,6 +194,21 @@ class AppLocalizations {
       'confluenceLinkRemoveFailed': 'Failed to remove link: %s',
       'removeConfluenceLink': 'Remove link',
       'removeConfluenceLinkConfirm': 'Remove this Confluence link from the issue?',
+      'management': 'Management',
+      'sentry': 'Sentry',
+      'sentryLinkHint': 'Paste Sentry issue link (e.g. https://...sentry.io/issues/...)',
+      'viewSentryIssue': 'View issue',
+      'viewInSentry': 'View in Sentry',
+      'invalidSentryLink': 'Please enter a valid Sentry issue link (sentry.io)',
+      'sentryApiToken': 'Sentry API token (optional)',
+      'sentryApiTokenHint': 'Create at sentry.io/settings/account/api/auth-tokens/ with event:read scope',
+      'showMoreFrames': 'Show %s more frames',
+      'viewMoreBreadcrumbs': 'View %s more',
+      'eventCount': 'Events: %s',
+      'contexts': 'Contexts',
+      'additionalData': 'Additional Data',
+      'formatted': 'Formatted',
+      'raw': 'Raw',
     },
     'vi': {
       'menu': 'Menu',
@@ -379,6 +394,21 @@ class AppLocalizations {
       'confluenceLinkRemoveFailed': 'Xóa liên kết thất bại: %s',
       'removeConfluenceLink': 'Xóa liên kết',
       'removeConfluenceLinkConfirm': 'Xóa liên kết Confluence này khỏi công việc?',
+      'management': 'Quản lý',
+      'sentry': 'Sentry',
+      'sentryLinkHint': 'Dán link Sentry (vd: https://...sentry.io/issues/...)',
+      'viewSentryIssue': 'Xem lỗi',
+      'viewInSentry': 'Xem trong Sentry',
+      'invalidSentryLink': 'Vui lòng nhập link Sentry hợp lệ (sentry.io)',
+      'sentryApiToken': 'Sentry API token (tùy chọn)',
+      'sentryApiTokenHint': 'Tạo tại sentry.io/settings/account/api/auth-tokens/ với quyền event:read',
+      'showMoreFrames': 'Hiện thêm %s frame',
+      'viewMoreBreadcrumbs': 'Xem thêm %s',
+      'eventCount': 'Sự kiện: %s',
+      'contexts': 'Ngữ cảnh',
+      'additionalData': 'Dữ liệu bổ sung',
+      'formatted': 'Định dạng',
+      'raw': 'Thô',
     },
   };
 
@@ -568,6 +598,28 @@ class AppLocalizations {
       (_strings['confluenceLinkRemoveFailed'] ?? _localizedValues['en']!['confluenceLinkRemoveFailed']!).replaceAll('%s', msg);
   String get removeConfluenceLink => _s('removeConfluenceLink');
   String get removeConfluenceLinkConfirm => _s('removeConfluenceLinkConfirm');
+  String get management => _s('management');
+  String get sentry => _s('sentry');
+  String get sentryLinkHint => _s('sentryLinkHint');
+  String get viewSentryIssue => _s('viewSentryIssue');
+  String get viewInSentry => _s('viewInSentry');
+  String get invalidSentryLink => _s('invalidSentryLink');
+  String get sentryApiToken => _s('sentryApiToken');
+  String get sentryApiTokenHint => _s('sentryApiTokenHint');
+
+  String showMoreFrames(int count) =>
+      (_strings['showMoreFrames'] ?? _localizedValues['en']!['showMoreFrames']!).replaceAll('%s', count.toString());
+
+  String viewMoreBreadcrumbs(int count) =>
+      (_strings['viewMoreBreadcrumbs'] ?? _localizedValues['en']!['viewMoreBreadcrumbs']!).replaceAll('%s', count.toString());
+
+  String eventCount(String count) =>
+      (_strings['eventCount'] ?? _localizedValues['en']!['eventCount']!).replaceAll('%s', count);
+
+  String get contexts => _s('contexts');
+  String get additionalData => _s('additionalData');
+  String get formatted => _s('formatted');
+  String get raw => _s('raw');
 
   String deleteSprintConfirm(String sprintName) =>
       (_strings['deleteSprintConfirm'] ?? _localizedValues['en']!['deleteSprintConfirm']!).replaceAll('%s', sprintName);

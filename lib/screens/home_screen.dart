@@ -13,6 +13,8 @@ import '../widgets/create_sprint_dialog.dart';
 import '../widgets/update_sprint_dialog.dart';
 import 'issue_detail_screen.dart';
 import 'create_issue_screen.dart';
+import 'sentry_screen.dart';
+import 'settings_screen.dart';
 
 /// Home: board selector, Board/Backlog tabs, assignee filter, issue list (same flow as reference app).
 class HomeScreen extends StatefulWidget {
@@ -52,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Set<int> _collapsedSprints = {};
   bool _backlogCollapsed = false;
   JiraUser? _currentUser;
+  bool _sentryTokenConfigured = false;
 
   /// Backlog screen shows User Story, Story, Bug, Task (no Epic, Sub-task, etc.)
   static const _backlogAllowedIssueTypes = {'user story', 'story', 'bug', 'task'};
@@ -78,12 +81,26 @@ class _HomeScreenState extends State<HomeScreen> {
         final userFuture = api.getMyself();
         await _loadBoards(reset: true, defaultBoardId: defaultId);
         final user = await userFuture;
-        if (mounted) setState(() => _currentUser = user);
+        final sentryToken = await storage.getSentryApiToken();
+        if (mounted) {
+          setState(() {
+            _currentUser = user;
+            _sentryTokenConfigured = sentryToken != null && sentryToken.trim().isNotEmpty;
+          });
+        }
       }
     } catch (e) {
       _showSnack(AppLocalizations.of(context).failedToInitialize, isError: true);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshSentryConfig() async {
+    final storage = context.read<StorageService>();
+    final token = await storage.getSentryApiToken();
+    if (mounted) {
+      setState(() => _sentryTokenConfigured = token != null && token.trim().isNotEmpty);
     }
   }
 
@@ -701,6 +718,28 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             ListTile(
+              leading: Icon(Icons.dashboard, color: Theme.of(context).colorScheme.onSurface),
+              title: Text(AppLocalizations.of(context).management, style: const TextStyle(fontWeight: FontWeight.w500)),
+              onTap: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            if (_sentryTokenConfigured)
+              ListTile(
+                leading: Icon(Icons.bug_report, color: Theme.of(context).colorScheme.onSurface),
+                title: Text(AppLocalizations.of(context).sentry, style: const TextStyle(fontWeight: FontWeight.w500)),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (context) => SentryScreen(
+                        onBack: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ListTile(
               leading: Icon(Icons.language, color: Theme.of(context).colorScheme.onSurface),
               title: Text(AppLocalizations.of(context).language, style: const TextStyle(fontWeight: FontWeight.w500)),
               onTap: () {
@@ -713,7 +752,14 @@ class _HomeScreenState extends State<HomeScreen> {
               title: Text(AppLocalizations.of(context).settings, style: const TextStyle(fontWeight: FontWeight.w500)),
               onTap: () {
                 Navigator.of(context).pop();
-                widget.onOpenSettings();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => SettingsScreen(
+                      onBack: () => Navigator.of(context).pop(),
+                      onLogout: widget.onLogout,
+                    ),
+                  ),
+                ).then((_) => _refreshSentryConfig());
               },
             ),
             const Spacer(),

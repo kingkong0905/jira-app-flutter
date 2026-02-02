@@ -29,6 +29,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _showBoardPicker = false;
   String _boardSearch = '';
   bool _apiTokenObscured = true;
+  final _sentryTokenController = TextEditingController();
+  bool _sentryTokenObscured = true;
 
   @override
   void initState() {
@@ -41,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _emailController.dispose();
     _jiraUrlController.dispose();
     _apiTokenController.dispose();
+    _sentryTokenController.dispose();
     super.dispose();
   }
 
@@ -68,6 +71,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           } catch (_) {}
         }
       }
+      final sentryToken = await context.read<StorageService>().getSentryApiToken();
+      if (mounted && sentryToken != null) _sentryTokenController.text = sentryToken;
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -126,6 +131,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _showSnack(AppLocalizations.of(context).failedToSaveSettings, isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveSentryToken() async {
+    try {
+      await context.read<StorageService>().setSentryApiToken(_sentryTokenController.text.trim().isEmpty ? null : _sentryTokenController.text.trim());
+      _showSnack(AppLocalizations.of(context).settingsSavedSuccess);
+    } catch (_) {
+      _showSnack(AppLocalizations.of(context).failedToSaveSettings, isError: true);
     }
   }
 
@@ -291,6 +305,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Text(AppLocalizations.of(context).saveDefaultBoard),
                   ),
                 ],
+              ],
+            ),
+            const SizedBox(height: AppTheme.spaceXxl),
+            _buildSection(
+              title: AppLocalizations.of(context).sentry,
+              subtitle: AppLocalizations.of(context).sentryApiTokenHint,
+              children: [
+                TextField(
+                  controller: _sentryTokenController,
+                  obscureText: _sentryTokenObscured,
+                  decoration: InputDecoration(
+                    labelText: AppLocalizations.of(context).sentryApiToken,
+                    prefixIcon: const Icon(Icons.bug_report_outlined, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(_sentryTokenObscured ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 22),
+                      onPressed: () => setState(() => _sentryTokenObscured = !_sentryTokenObscured),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spaceMd),
+                OutlinedButton(
+                  onPressed: _saveSentryToken,
+                  child: Text(AppLocalizations.of(context).saveChanges),
+                ),
               ],
             ),
             const SizedBox(height: AppTheme.spaceXxl),

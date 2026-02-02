@@ -13,6 +13,7 @@ class StorageService {
   static const _isConfigured = 'jira_is_configured';
   static const _defaultBoardId = 'jira_default_board_id';
   static const _locale = 'app_locale';
+  static const _sentryApiToken = 'sentry_api_token';
 
   Database? _db;
   Future<void>? _initFuture;
@@ -102,5 +103,17 @@ class StorageService {
 
   Future<String?> getLocale() async {
     return _get(_locale);
+  }
+
+  Future<void> setSentryApiToken(String? token) async {
+    if (token == null || token.isEmpty) {
+      await _delete(_sentryApiToken);
+    } else {
+      await _set(_sentryApiToken, token);
+    }
+  }
+
+  Future<String?> getSentryApiToken() async {
+    return _get(_sentryApiToken);
   }
 }

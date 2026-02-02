@@ -6,6 +6,7 @@ import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'services/storage_service.dart';
 import 'services/jira_api_service.dart';
+import 'services/sentry_api_service.dart';
 import 'l10n/app_localizations.dart';
 import 'l10n/locale_notifier.dart';
 
@@ -22,6 +23,7 @@ class JiraApp extends StatelessWidget {
       providers: [
         Provider(create: (_) => StorageService()),
         Provider(create: (_) => JiraApiService()),
+        Provider(create: (_) => SentryApiService()),
         ChangeNotifierProvider(
           create: (c) => LocaleNotifier(c.read<StorageService>()),
         ),

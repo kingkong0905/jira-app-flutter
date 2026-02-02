@@ -13,8 +13,80 @@ import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:video_player/video_player.dart';
 import '../models/jira_models.dart';
 import '../services/jira_api_service.dart';
+import '../services/storage_service.dart';
+import '../services/sentry_api_service.dart';
 import '../l10n/app_localizations.dart';
 import '../utils/adf_quill_converter.dart';
+import 'sentry_issue_detail_screen.dart';
+
+/// Sentry issue URL pattern (e.g. https://org.sentry.io/issues/123/ or https://sentry.io/organizations/org/issues/123/)
+final _sentryIssueUrlRegex = RegExp(
+  r'https?://[^\s"<>]*sentry[^\s"<>]*/issues/\d+[^\s"<>]*',
+  caseSensitive: false,
+);
+
+/// Extracts the first Sentry issue URL from Jira description (plain string or ADF).
+String? extractFirstSentryUrlFromDescription(dynamic description) {
+  if (description == null) return null;
+  final urls = <String>[];
+  if (description is String) {
+    for (final m in _sentryIssueUrlRegex.allMatches(description)) {
+      final url = m.group(0);
+      if (url != null && url.isNotEmpty && SentryApiService.parseIssueUrl(url) != null) {
+        return url.trim();
+      }
+    }
+    return null;
+  }
+  if (description is Map) {
+    _collectUrlsFromAdf(description, urls);
+    final plain = _plainFromAdf(description);
+    for (final m in _sentryIssueUrlRegex.allMatches(plain)) {
+      final url = m.group(0);
+      if (url != null && url.isNotEmpty && SentryApiService.parseIssueUrl(url) != null) {
+        return url.trim();
+      }
+    }
+    for (final u in urls) {
+      if (SentryApiService.parseIssueUrl(u) != null) return u;
+    }
+  }
+  return null;
+}
+
+void _collectUrlsFromAdf(dynamic node, List<String> urls) {
+  if (node == null) return;
+  if (node is Map) {
+    if (node['type'] == 'text' && node['marks'] is List) {
+      for (final m in node['marks'] as List) {
+        if (m is Map && m['type'] == 'link' && m['attrs'] is Map) {
+          final href = (m['attrs'] as Map)['href']?.toString();
+          if (href != null && href.isNotEmpty) urls.add(href);
+        }
+      }
+    }
+    if (node['type'] == 'inlineCard' && node['attrs'] is Map) {
+      final url = (node['attrs'] as Map)['url']?.toString();
+      if (url != null && url.isNotEmpty) urls.add(url);
+    }
+    final c = node['content'];
+    if (c is List) for (final child in c) _collectUrlsFromAdf(child, urls);
+  }
+  if (node is List) for (final child in node) _collectUrlsFromAdf(child, urls);
+}
+
+String _plainFromAdf(dynamic node) {
+  if (node == null) return '';
+  if (node is String) return node;
+  if (node is Map) {
+    final t = node['text'];
+    if (t is String) return t;
+    final c = node['content'];
+    if (c is List) return c.map(_plainFromAdf).join('');
+  }
+  if (node is List) return node.map(_plainFromAdf).join('');
+  return '';
+}
 
 /// Issue detail: structure and logic aligned with reference (kingkong0905/jira-app IssueDetailsScreen).
 class IssueDetailScreen extends StatefulWidget {
@@ -107,6 +179,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   // Epic children (when issue is Epic)
   List<JiraIssue> _epicChildren = [];
   bool _loadingEpicChildren = false;
+  // Sentry link from description (show "View in Sentry" when configured)
+  String? _sentryUrl;
+  bool _sentryConfigured = false;
+  bool _loadingSentryDetail = false;
 
   @override
   void initState() {
@@ -281,17 +357,24 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       final comments = await api.getIssueComments(widget.issueKey);
       final currentUser = await api.getMyself();
       if (mounted) {
-        setState(() {
-          _issue = issue;
-          _comments = comments;
-          _currentUser = currentUser;
-          _loading = false;
-          _subtasks = issue?.fields.subtasks ?? [];
-        });
-        _loadSubtasks();
-        _loadParent(issue);
-        _loadConfluenceLinks();
-        if ((issue?.fields.issuetype.name ?? '').toLowerCase().contains('epic')) _loadEpicChildren();
+        final sentryUrl = extractFirstSentryUrlFromDescription(issue?.fields.description);
+        final storage = context.read<StorageService>();
+        final sentryToken = await storage.getSentryApiToken();
+        if (mounted) {
+          setState(() {
+            _issue = issue;
+            _comments = comments;
+            _currentUser = currentUser;
+            _loading = false;
+            _subtasks = issue?.fields.subtasks ?? [];
+            _sentryUrl = sentryUrl;
+            _sentryConfigured = sentryToken != null && sentryToken.trim().isNotEmpty;
+          });
+          _loadSubtasks();
+          _loadParent(issue);
+          _loadConfluenceLinks();
+          if ((issue?.fields.issuetype.name ?? '').toLowerCase().contains('epic')) _loadEpicChildren();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1112,6 +1195,23 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             onAttachmentPress: _onAttachmentPress,
             onNeedLoadImage: _loadDescriptionImage,
           ),
+          if (_sentryUrl != null && _sentryConfigured) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _loadingSentryDetail ? null : _openSentryDetail,
+              icon: _loadingSentryDetail
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+                    )
+                  : const Icon(Icons.bug_report, size: 18),
+              label: Text(AppLocalizations.of(context).viewInSentry),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1470,7 +1570,54 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Future<void> _refreshIssue() async {
     final api = context.read<JiraApiService>();
     final issue = await api.getIssueDetails(widget.issueKey);
-    if (mounted) setState(() => _issue = issue);
+    if (!mounted) return;
+    final sentryUrl = extractFirstSentryUrlFromDescription(issue?.fields.description);
+    final storage = context.read<StorageService>();
+    final sentryToken = await storage.getSentryApiToken();
+    if (mounted) {
+      setState(() {
+        _issue = issue;
+        _sentryUrl = sentryUrl;
+        _sentryConfigured = sentryToken != null && sentryToken.trim().isNotEmpty;
+      });
+    }
+  }
+
+  Future<void> _openSentryDetail() async {
+    final url = _sentryUrl;
+    if (url == null || url.isEmpty) return;
+    final parts = SentryApiService.parseIssueUrl(url);
+    if (parts == null) return;
+    setState(() => _loadingSentryDetail = true);
+    try {
+      final storage = context.read<StorageService>();
+      final api = context.read<SentryApiService>();
+      final token = await storage.getSentryApiToken();
+      final detail = await api.getIssueDetail(parts: parts, authToken: token);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (context) => SentryIssueDetailScreen(
+            detail: detail,
+            onBack: () => Navigator.of(context).pop(),
+          ),
+        ),
+      );
+    } on SentryApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingSentryDetail = false);
+    }
   }
 
   Widget _buildAssigneePickerModal() {
