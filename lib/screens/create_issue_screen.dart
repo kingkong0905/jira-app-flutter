@@ -160,9 +160,12 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
         jql = 'project = ${widget.projectKey} AND issuetype = Epic ORDER BY created DESC';
       }
     } else if (typeName == 'task') {
-      // For Task, parent can be Epic or Story
+      // For Task, parent can be Epic or User Story
       final epicType = _issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'epic').firstOrNull;
-      final storyType = _issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'story').firstOrNull;
+      final storyType = _issueTypes.where((t) {
+        final name = (t['name'] as String).toLowerCase();
+        return name == 'story' || name == 'user story';
+      }).firstOrNull;
       
       final types = <String>[];
       if (epicType != null) types.add(epicType['id'].toString());
@@ -171,12 +174,15 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       if (types.isNotEmpty) {
         jql = 'project = ${widget.projectKey} AND issuetype in (${types.join(',')}) ORDER BY created DESC';
       } else {
-        jql = 'project = ${widget.projectKey} AND (issuetype = Epic OR issuetype = Story) ORDER BY created DESC';
+        jql = 'project = ${widget.projectKey} AND (issuetype = Epic OR issuetype = Story OR issuetype = "User Story") ORDER BY created DESC';
       }
     } else if (typeName.contains('sub-task') || typeName.contains('subtask') || typeName == 'sub task') {
-      // For Subtask, parent can be Task, Story, or Bug
+      // For Subtask, parent can be Task, User Story, or Bug
       final taskType = _issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'task').firstOrNull;
-      final storyType = _issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'story').firstOrNull;
+      final storyType = _issueTypes.where((t) {
+        final name = (t['name'] as String).toLowerCase();
+        return name == 'story' || name == 'user story';
+      }).firstOrNull;
       final bugType = _issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'bug').firstOrNull;
       
       final types = <String>[];
@@ -187,7 +193,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       if (types.isNotEmpty) {
         jql = 'project = ${widget.projectKey} AND issuetype in (${types.join(',')}) ORDER BY created DESC';
       } else {
-        jql = 'project = ${widget.projectKey} AND (issuetype = Task OR issuetype = Story OR issuetype = Bug) ORDER BY created DESC';
+        jql = 'project = ${widget.projectKey} AND (issuetype = Task OR issuetype = Story OR issuetype = "User Story" OR issuetype = Bug) ORDER BY created DESC';
       }
     }
 
@@ -728,16 +734,27 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     );
   }
 
-  void _showAssigneePicker() {
-    showModalBottomSheet(
+  void _showAssigneePicker() async {
+    await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (context) => _AssigneePickerSheet(
         projectKey: widget.projectKey!,
         assignableUsers: _assignableUsers,
         selectedAssignee: _selectedAssignee,
-        onSelect: (accountId) {
-          setState(() => _selectedAssignee = accountId);
+        onSelect: (accountId, user) {
+          // Update state after modal is dismissed
+          Future.microtask(() {
+            if (mounted) {
+              setState(() {
+                _selectedAssignee = accountId;
+                // Add user to assignableUsers list if not already present (from search)
+                if (user != null && !_assignableUsers.any((u) => u.accountId == user.accountId)) {
+                  _assignableUsers.add(user);
+                }
+              });
+            }
+          });
         },
       ),
     );
@@ -827,7 +844,7 @@ class _AssigneePickerSheet extends StatefulWidget {
   final String projectKey;
   final List<JiraUser> assignableUsers;
   final String? selectedAssignee;
-  final Function(String?) onSelect;
+  final Function(String?, JiraUser?) onSelect;
 
   const _AssigneePickerSheet({
     required this.projectKey,
@@ -894,36 +911,39 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.75,
-      ),
-      padding: const EdgeInsets.only(top: 16),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header with close button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    AppLocalizations.of(context).selectAssignee,
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
-                    textAlign: TextAlign.center,
+    final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboardHeight),
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.75,
+        ),
+        padding: const EdgeInsets.only(top: 16),
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header with close button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      AppLocalizations.of(context).selectAssignee,
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () {
-                    _debounceTimer?.cancel();
-                    Navigator.pop(context);
-                  },
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () {
+                      _debounceTimer?.cancel();
+                      Navigator.pop(context);
+                    },
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -988,8 +1008,8 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                               ? Icon(Icons.check, color: colorScheme.primary)
                               : null,
                           onTap: () {
-                            widget.onSelect(null);
                             Navigator.pop(context);
+                            widget.onSelect(null, null);
                           },
                         ),
                       // Assignable users with avatars
@@ -1013,8 +1033,8 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                               : null,
                           trailing: isSelected ? Icon(Icons.check, color: colorScheme.primary) : null,
                           onTap: () {
-                            widget.onSelect(user.accountId);
                             Navigator.pop(context);
+                            widget.onSelect(user.accountId, user);
                           },
                         );
                       }),
@@ -1023,6 +1043,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
           ),
           const SizedBox(height: 16),
         ],
+      ),
       ),
     );
   }
@@ -1091,10 +1112,14 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
         final typeName = widget.issueTypes
             .where((t) => t['id'] == widget.selectedIssueTypeId)
             .firstOrNull?['name'] as String?;
+        final lowerTypeName = typeName?.toLowerCase();
 
-        if (typeName?.toLowerCase() == 'subtask') {
+        if (lowerTypeName == 'subtask' || lowerTypeName == 'sub-task' || lowerTypeName == 'sub task') {
           final taskType = widget.issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'task').firstOrNull;
-          final storyType = widget.issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'story').firstOrNull;
+          final storyType = widget.issueTypes.where((t) {
+            final name = (t['name'] as String).toLowerCase();
+            return name == 'story' || name == 'user story';
+          }).firstOrNull;
           final bugType = widget.issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'bug').firstOrNull;
           
           final types = <String>[];
@@ -1105,14 +1130,31 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
           if (types.isNotEmpty) {
             jql = 'project = ${widget.projectKey} AND issuetype in (${types.join(',')})';
           } else {
-            jql = 'project = ${widget.projectKey} AND (issuetype = Task OR issuetype = Story OR issuetype = Bug)';
+            jql = 'project = ${widget.projectKey} AND (issuetype = Task OR issuetype = Story OR issuetype = "User Story" OR issuetype = Bug)';
           }
-        } else if (typeName?.toLowerCase() == 'story') {
+        } else if (lowerTypeName == 'story' || lowerTypeName == 'user story' || lowerTypeName == 'bug') {
           final epicType = widget.issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'epic').firstOrNull;
           if (epicType != null) {
             jql = 'project = ${widget.projectKey} AND issuetype = ${epicType['id']}';
           } else {
             jql = 'project = ${widget.projectKey} AND issuetype = Epic';
+          }
+        } else if (lowerTypeName == 'task') {
+          // For Task, parent can be Epic or User Story
+          final epicType = widget.issueTypes.where((t) => (t['name'] as String).toLowerCase() == 'epic').firstOrNull;
+          final storyType = widget.issueTypes.where((t) {
+            final name = (t['name'] as String).toLowerCase();
+            return name == 'story' || name == 'user story';
+          }).firstOrNull;
+          
+          final types = <String>[];
+          if (epicType != null) types.add(epicType['id'].toString());
+          if (storyType != null) types.add(storyType['id'].toString());
+          
+          if (types.isNotEmpty) {
+            jql = 'project = ${widget.projectKey} AND issuetype in (${types.join(',')})';
+          } else {
+            jql = 'project = ${widget.projectKey} AND (issuetype = Epic OR issuetype = Story OR issuetype = "User Story")';
           }
         }
 
