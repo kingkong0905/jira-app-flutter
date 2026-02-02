@@ -2,9 +2,122 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/jira_models.dart';
+import 'http_constants.dart';
 
 /// Jira REST API client with same endpoints and auth as reference app (kingkong0905/jira-app).
 class JiraApiService {
+  // Jira-specific constants
+  static const String _userAgent = 'JiraManagementFlutter/1.0';
+
+  // API Endpoints
+  static const String _endpointApi3Myself = '/rest/api/3/myself';
+  static const String _endpointApi2Myself = '/rest/api/2/myself';
+  static const String _endpointApi3User = '/rest/api/3/user';
+  static const String _endpointApi3Issue = '/rest/api/3/issue';
+  static const String _endpointApi3Search = '/rest/api/3/search';
+  static const String _endpointApi3SearchJql = '/rest/api/3/search/jql';
+  static const String _endpointApi3Priority = '/rest/api/3/priority';
+  static const String _endpointApi3UserAssignableSearch = '/rest/api/3/user/assignable/search';
+  static const String _endpointApi3ProjectStatuses = '/rest/api/3/project';
+  static const String _endpointAgileBoard = '/rest/agile/1.0/board';
+  static const String _endpointAgileSprint = '/rest/agile/1.0/sprint';
+  static const String _endpointApplinks = '/rest/applinks/3.0/applinks';
+  static const String _endpointWikiPage = '/wiki/pages/viewpage.action';
+  static const String _endpointDevStatusDetail = '/rest/dev-status/1.0/issue/detail';
+
+  // Query Parameters
+  static const String _paramStartAt = 'startAt';
+  static const String _paramMaxResults = 'maxResults';
+  static const String _paramFields = 'fields';
+  static const String _paramJql = 'jql';
+  static const String _paramName = 'name';
+  static const String _paramProjectKeyOrId = 'projectKeyOrId';
+  static const String _paramAssignee = 'assignee';
+  static const String _paramAccountId = 'accountId';
+  static const String _paramQuery = 'query';
+  static const String _paramProject = 'project';
+  static const String _paramExpand = 'expand';
+
+  // Field Names
+  static const String _fieldSummary = 'summary';
+  static const String _fieldStatus = 'status';
+  static const String _fieldPriority = 'priority';
+  static const String _fieldAssignee = 'assignee';
+  static const String _fieldIssueType = 'issuetype';
+  static const String _fieldCreated = 'created';
+  static const String _fieldUpdated = 'updated';
+  static const String _fieldDueDate = 'duedate';
+  static const String _fieldSprint = 'sprint';
+  static const String _fieldDescription = 'description';
+  static const String _fieldReporter = 'reporter';
+  static const String _fieldComment = 'comment';
+  static const String _fieldParent = 'parent';
+  static const String _fieldAttachment = 'attachment';
+  static const String _fieldProject = 'project';
+  static const String _fieldCustomfield10016 = 'customfield_10016';
+  static const String _fieldCustomfield10020 = 'customfield_10020';
+  static const String _fieldSubtasks = 'subtasks';
+  static const String _fieldIssueLinks = 'issuelinks';
+
+  // Common Field Sets
+  static const String _fieldsBasic = 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint';
+  static const String _fieldsEpic = 'summary,status,priority,assignee,issuetype,created,updated,duedate';
+  static const String _fieldsIssueDetails = 'summary,description,status,priority,assignee,reporter,issuetype,created,updated,duedate,customfield_10016,comment,parent,attachment,project,sprint,customfield_10020,subtasks,issuelinks';
+  static const String _fieldsSearch = 'summary,description,status,priority,assignee,issuetype,created,updated';
+
+  // JSON Keys
+  static const String _jsonKeyValues = 'values';
+  static const String _jsonKeyTotal = 'total';
+  static const String _jsonKeyIsLast = 'isLast';
+  static const String _jsonKeyIssues = 'issues';
+  static const String _jsonKeyComments = 'comments';
+  static const String _jsonKeyTransitions = 'transitions';
+  static const String _jsonKeyErrorMessages = 'errorMessages';
+  static const String _jsonKeyErrors = 'errors';
+  static const String _jsonKeyKey = 'key';
+  static const String _jsonKeyFields = 'fields';
+  static const String _jsonKeyTransition = 'transition';
+  static const String _jsonKeyId = 'id';
+  static const String _jsonKeyState = 'state';
+  static const String _jsonKeyName = 'name';
+  static const String _jsonKeyGoal = 'goal';
+  static const String _jsonKeyStartDate = 'startDate';
+  static const String _jsonKeyEndDate = 'endDate';
+  static const String _jsonKeyOriginBoardId = 'originBoardId';
+  static const String _jsonKeyGlobalId = 'globalId';
+  static const String _jsonKeyApplication = 'application';
+  static const String _jsonKeyType = 'type';
+  static const String _jsonKeyRelationship = 'relationship';
+  static const String _jsonKeyObject = 'object';
+  static const String _jsonKeyUrl = 'url';
+  static const String _jsonKeyTitle = 'title';
+  static const String _jsonKeyBody = 'body';
+  static const String _jsonKeyVersion = 'version';
+  static const String _jsonKeyContent = 'content';
+  static const String _jsonKeyParagraph = 'paragraph';
+  static const String _jsonKeyText = 'text';
+  static const String _jsonKeyMention = 'mention';
+  static const String _jsonKeyAttrs = 'attrs';
+  static const String _jsonKeyParent = 'parent';
+  static const String _jsonKeyRenderedBody = 'renderedBody';
+  static const String _jsonKeyDetail = 'detail';
+
+  // Confluence Constants
+  static const String _confluenceType = 'com.atlassian.confluence';
+  static const String _confluenceName = 'Confluence';
+  static const String _confluenceRelationship = 'Wiki Page';
+  static const String _confluencePageTitle = 'Confluence Page';
+
+  // Sprint States
+  static const String _sprintStateActive = 'active';
+  static const String _sprintStateClosed = 'closed';
+  static const String _sprintStateFuture = 'future';
+
+  // JQL Keywords
+  static const String _jqlAssigneeEmpty = 'assignee is EMPTY';
+  static const String _jqlSprintEmpty = 'sprint is EMPTY';
+
+  // Cache and Timeout
   JiraConfig? _config;
   final Map<String, _CacheEntry> _cache = {};
   static const _cacheDurationMs = 5 * 60 * 1000; // 5 min
@@ -61,10 +174,10 @@ class JiraApiService {
     if (c == null) throw StateError('Jira API not initialized.');
     final auth = base64Encode(utf8.encode('${c.email}:${c.apiToken}'));
     return {
-      'Authorization': 'Basic $auth',
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'User-Agent': 'JiraManagementFlutter/1.0',
+      HttpConstants.headerAuthorization: '${HttpConstants.authSchemeBasic} $auth',
+      HttpConstants.headerContentType: HttpConstants.contentTypeJson,
+      HttpConstants.headerAccept: HttpConstants.contentTypeJson,
+      HttpConstants.headerUserAgent: _userAgent,
     };
   }
 
@@ -74,8 +187,8 @@ class JiraApiService {
     if (c == null) throw StateError('Jira API not initialized.');
     final auth = base64Encode(utf8.encode('${c.email}:${c.apiToken}'));
     return {
-      'Authorization': 'Basic $auth',
-      'User-Agent': 'JiraManagementFlutter/1.0',
+      HttpConstants.headerAuthorization: '${HttpConstants.authSchemeBasic} $auth',
+      HttpConstants.headerUserAgent: _userAgent,
     };
   }
 
@@ -101,6 +214,24 @@ class JiraApiService {
     _cache.clear();
   }
 
+  /// Clear caches related to a specific issue (issue details, comments, board issues).
+  void _clearIssueCache(String issueKey) {
+    _cache.remove(_cacheKey('$_endpointApi3Issue/$issueKey', {}));
+    _cache.remove(_cacheKey('$_endpointApi3Issue/$issueKey/comment', {}));
+    // Clear board issues caches (they may contain this issue)
+    _cache.removeWhere((key, _) => key.contains(_endpointAgileBoard) && key.contains('/issue'));
+    // Clear sprint issues caches
+    _cache.removeWhere((key, _) => key.contains(_endpointAgileBoard) && key.contains('/sprint') && key.contains('/issue'));
+    // Clear backlog caches
+    _cache.removeWhere((key, _) => key.contains(_endpointAgileBoard) && key.contains('/backlog'));
+  }
+
+  /// Clear caches related to a board (board issues, sprints, assignees).
+  void _clearBoardCache(int boardId) {
+    _cache.removeWhere((key, _) => 
+      key.contains('$_endpointAgileBoard/$boardId'));
+  }
+
   /// Returns null on success, or an error message string on failure.
   Future<String?> testConnectionResult() async {
     final base = _baseUrl;
@@ -110,8 +241,8 @@ class JiraApiService {
     try {
       // Jira Cloud uses /rest/api/3; Jira Server/Data Center often uses /rest/api/2
       final urls = [
-        '$base/rest/api/3/myself',
-        '$base/rest/api/2/myself',
+        '$base$_endpointApi3Myself',
+        '$base$_endpointApi2Myself',
       ];
       for (final url in urls) {
         _log('GET', url);
@@ -120,28 +251,28 @@ class JiraApiService {
               .get(Uri.parse(url), headers: _headers)
               .timeout(_connectionTestTimeout);
           _log('response', 'statusCode=${r.statusCode} url=$url');
-          if (r.statusCode != 200 && r.body.isNotEmpty) {
+          if (r.statusCode != HttpConstants.statusOk && r.body.isNotEmpty) {
             final bodyPreview = r.body.length > 300 ? '${r.body.substring(0, 300)}...' : r.body;
             _log('response body', bodyPreview.replaceAll('\n', ' '));
           }
-          if (r.statusCode == 200) {
+          if (r.statusCode == HttpConstants.statusOk) {
             _log('testConnectionResult', 'SUCCESS');
             return null;
           }
-          if (r.statusCode == 401) {
+          if (r.statusCode == HttpConstants.statusUnauthorized) {
             return 'Invalid email or API token. Check credentials and try again.';
           }
-          if (r.statusCode == 403) {
+          if (r.statusCode == HttpConstants.statusForbidden) {
             return 'Access forbidden. Check your Jira permissions.';
           }
           // 404 etc.: try next URL
-          if (r.statusCode == 404) {
+          if (r.statusCode == HttpConstants.statusNotFound) {
             _log('testConnectionResult', '404, trying next API version');
             continue;
           }
           try {
             final body = jsonDecode(r.body);
-            final raw = body is Map ? (body['errorMessages'] as List?)?.join(' ') ?? r.body : r.body;
+            final raw = body is Map ? (body[_jsonKeyErrorMessages] as List?)?.join(' ') ?? r.body : r.body;
             final msg = raw.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
             return 'Jira error (${r.statusCode}): ${msg.length > 80 ? '${msg.substring(0, 80)}...' : msg}';
           } catch (_) {
@@ -183,10 +314,10 @@ class JiraApiService {
 
   /// Current user (for comment Edit/Delete visibility). Same as reference useIssueData currentUser.
   Future<JiraUser?> getMyself() async {
-    for (final path in ['/rest/api/3/myself', '/rest/api/2/myself']) {
+    for (final path in [_endpointApi3Myself, _endpointApi2Myself]) {
       try {
         final r = await http.get(Uri.parse('$_baseUrl$path'), headers: _headers).timeout(_timeout);
-        if (r.statusCode == 200) {
+        if (r.statusCode == HttpConstants.statusOk) {
           final json = jsonDecode(r.body) as Map<String, dynamic>;
           return JiraUser.fromJson(json);
         }
@@ -199,9 +330,9 @@ class JiraApiService {
   Future<JiraUser?> getUserByAccountId(String accountId) async {
     if (accountId.isEmpty) return null;
     try {
-      final uri = Uri.parse('$_baseUrl/rest/api/3/user').replace(queryParameters: {'accountId': accountId});
+      final uri = Uri.parse('$_baseUrl$_endpointApi3User').replace(queryParameters: {_paramAccountId: accountId});
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpConstants.statusOk) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
         return JiraUser.fromJson(json);
       }
@@ -213,7 +344,7 @@ class JiraApiService {
   Future<List<int>?> fetchAttachmentBytes(String contentUrl) async {
     try {
       final r = await http.get(Uri.parse(contentUrl), headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) return r.bodyBytes;
+      if (r.statusCode == HttpConstants.statusOk) return r.bodyBytes;
     } catch (_) {}
     return null;
   }
@@ -230,30 +361,30 @@ class JiraApiService {
     String? projectKeyOrId,
   }) async {
     final params = <String, String>{
-      'startAt': startAt.toString(),
-      'maxResults': maxResults.toString(),
+      _paramStartAt: startAt.toString(),
+      _paramMaxResults: maxResults.toString(),
     };
     if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-      params['name'] = searchQuery.trim();
+      params[_paramName] = searchQuery.trim();
     }
     if (projectKeyOrId != null && projectKeyOrId.trim().isNotEmpty) {
-      params['projectKeyOrId'] = projectKeyOrId.trim();
+      params[_paramProjectKeyOrId] = projectKeyOrId.trim();
     }
-    final key = _cacheKey('/rest/agile/1.0/board', params);
+    final key = _cacheKey(_endpointAgileBoard, params);
     final cached = _getFromCache<BoardsResponse>(key, _cacheDurationMs);
     if (cached != null) return cached;
 
-    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board').replace(queryParameters: params);
+    final uri = Uri.parse('$_baseUrl$_endpointAgileBoard').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final boards = (json['values'] as List<dynamic>?)
+    final boards = (json[_jsonKeyValues] as List<dynamic>?)
             ?.map((e) => JiraBoard.fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];
-    final total = intFromJson(json['total']) ?? 0;
-    final isLast = json['isLast'] as bool? ?? true;
+    final total = intFromJson(json[_jsonKeyTotal]) ?? 0;
+    final isLast = json[_jsonKeyIsLast] as bool? ?? true;
     final result = BoardsResponse(boards: boards, total: total, isLast: isLast);
     _setCache(key, result);
     return result;
@@ -262,37 +393,37 @@ class JiraApiService {
   Future<JiraBoard?> getBoardById(int boardId) async {
     final r = await http
         .get(
-          Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId'),
+          Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId'),
           headers: _headers,
         )
         .timeout(_timeout);
-    if (r.statusCode != 200) return null;
+    if (r.statusCode != HttpConstants.statusOk) return null;
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     return JiraBoard.fromJson(json);
   }
 
   Future<List<JiraIssue>> getBoardIssues(int boardId, {int maxResults = 50, String? assignee}) async {
-    final key = _cacheKey('/rest/agile/1.0/board/$boardId/issue', {'maxResults': maxResults, 'assignee': assignee ?? 'all'});
+    final key = _cacheKey('$_endpointAgileBoard/$boardId/issue', {_paramMaxResults: maxResults, _paramAssignee: assignee ?? 'all'});
     final cached = _getFromCache<List<JiraIssue>>(key, _issuesCacheMs);
     if (cached != null) return cached;
 
     final params = <String, String>{
-      'maxResults': maxResults.toString(),
-      'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+      _paramMaxResults: maxResults.toString(),
+      _paramFields: _fieldsBasic,
     };
     if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
       if (assignee == 'unassigned') {
-        params['jql'] = 'assignee is EMPTY';
+        params[_paramJql] = _jqlAssigneeEmpty;
       } else {
-        params['jql'] = 'assignee = "$assignee"';
+        params[_paramJql] = 'assignee = "$assignee"';
       }
     }
-    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
+    final uri = Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/issue').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final list = (json['issues'] as List<dynamic>?) ?? [];
+    final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
     final issues = list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
     _setCache(key, issues);
     return issues;
@@ -305,22 +436,22 @@ class JiraApiService {
     const maxResults = 50;
     while (true) {
       final params = <String, String>{
-        'startAt': '$startAt',
-        'maxResults': '$maxResults',
-        'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+        _paramStartAt: '$startAt',
+        _paramMaxResults: '$maxResults',
+        _paramFields: _fieldsBasic,
       };
       if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
         if (assignee == 'unassigned') {
-          params['jql'] = 'assignee is EMPTY';
+          params[_paramJql] = _jqlAssigneeEmpty;
         } else {
-          params['jql'] = 'assignee = "$assignee"';
+          params[_paramJql] = 'assignee = "$assignee"';
         }
       }
-      final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
+      final uri = Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/issue').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      final list = (json['issues'] as List<dynamic>?) ?? [];
+      final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
       for (final e in list) {
         if (e is Map<String, dynamic>) {
           try {
@@ -335,17 +466,17 @@ class JiraApiService {
   }
 
   Future<List<BoardAssignee>> getBoardAssignees(int boardId) async {
-    final key = _cacheKey('/rest/agile/1.0/board/$boardId/assignees', {});
+    final key = _cacheKey('$_endpointAgileBoard/$boardId/assignees', {});
     final cached = _getFromCache<List<BoardAssignee>>(key, _cacheDurationMs);
     if (cached != null) return cached;
 
-    final params = {'maxResults': '1000', 'fields': 'assignee'};
-    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/issue').replace(queryParameters: params);
+    final params = {_paramMaxResults: '1000', _paramFields: _fieldAssignee};
+    final uri = Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/issue').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != HttpConstants.statusOk) return [];
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final list = (json['issues'] as List<dynamic>?) ?? [];
+    final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
     final seen = <String, String>{};
     for (final issue in list) {
       final assignee = (issue as Map<String, dynamic>)['fields']?['assignee'];
@@ -362,22 +493,22 @@ class JiraApiService {
   }
 
   Future<List<JiraSprint>> getSprintsForBoard(int boardId) async {
-    final key = _cacheKey('/rest/agile/1.0/board/$boardId/sprint', {});
+    final key = _cacheKey('$_endpointAgileBoard/$boardId/sprint', {});
     final cached = _getFromCache<List<JiraSprint>>(key, _cacheDurationMs);
     if (cached != null) return cached;
 
     try {
       final r = await http
           .get(
-            Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/sprint'),
+            Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/sprint'),
             headers: _headers,
           )
           .timeout(_timeout);
-      if (r.statusCode == 400 || r.statusCode == 404) return [];
-      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      if (r.statusCode == HttpConstants.statusBadRequest || r.statusCode == HttpConstants.statusNotFound) return [];
+      if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
 
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      final list = (json['values'] as List<dynamic>?) ?? [];
+      final list = (json[_jsonKeyValues] as List<dynamic>?) ?? [];
       final sprints = list.map((e) => JiraSprint.fromJson(e as Map<String, dynamic>)).toList();
       _setCache(key, sprints);
       return sprints;
@@ -389,7 +520,7 @@ class JiraApiService {
   Future<JiraSprint?> getActiveSprint(int boardId) async {
     final sprints = await getSprintsForBoard(boardId);
     try {
-      return sprints.firstWhere((s) => s.state == 'active');
+      return sprints.firstWhere((s) => s.state == _sprintStateActive);
     } catch (_) {
       return null;
     }
@@ -405,29 +536,29 @@ class JiraApiService {
   }) async {
     try {
       final body = <String, dynamic>{
-        'name': name,
-        'originBoardId': boardId,
+        _jsonKeyName: name,
+        _jsonKeyOriginBoardId: boardId,
       };
 
       if (goal != null && goal.isNotEmpty) {
-        body['goal'] = goal;
+        body[_jsonKeyGoal] = goal;
       }
 
       if (startDate != null && startDate.isNotEmpty) {
-        body['startDate'] = startDate;
+        body[_jsonKeyStartDate] = startDate;
       }
 
       if (endDate != null && endDate.isNotEmpty) {
-        body['endDate'] = endDate;
+        body[_jsonKeyEndDate] = endDate;
       }
 
       final r = await http.post(
-        Uri.parse('$_baseUrl/rest/agile/1.0/sprint'),
+        Uri.parse('$_baseUrl$_endpointAgileSprint'),
         headers: _headers,
         body: jsonEncode(body),
       ).timeout(_timeout);
 
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
         clearCache();
         return null; // Success
       }
@@ -435,11 +566,11 @@ class JiraApiService {
       // Parse error message
       try {
         final errorJson = jsonDecode(r.body) as Map<String, dynamic>;
-        final errorMessages = errorJson['errorMessages'] as List<dynamic>?;
+        final errorMessages = errorJson[_jsonKeyErrorMessages] as List<dynamic>?;
         if (errorMessages != null && errorMessages.isNotEmpty) {
           return errorMessages.join(', ');
         }
-        final errors = errorJson['errors'] as Map<String, dynamic>?;
+        final errors = errorJson[_jsonKeyErrors] as Map<String, dynamic>?;
         if (errors != null && errors.isNotEmpty) {
           return errors.values.join(', ');
         }
@@ -462,24 +593,24 @@ class JiraApiService {
     const maxResults = 50;
     while (true) {
       final params = <String, String>{
-        'startAt': '$startAt',
-        'maxResults': '$maxResults',
-        'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+        _paramStartAt: '$startAt',
+        _paramMaxResults: '$maxResults',
+        _paramFields: _fieldsBasic,
       };
       if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
         if (assignee == 'unassigned') {
-          params['jql'] = 'assignee is EMPTY';
+          params[_paramJql] = _jqlAssigneeEmpty;
         } else {
-          params['jql'] = 'assignee = "$assignee"';
+          params[_paramJql] = 'assignee = "$assignee"';
         }
       }
-      final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/sprint/$sprintId/issue')
+      final uri = Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/sprint/$sprintId/issue')
           .replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+      if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
 
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      final list = (json['issues'] as List<dynamic>?) ?? [];
+      final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
       for (final e in list) {
         if (e is Map<String, dynamic>) {
           try {
@@ -501,26 +632,26 @@ class JiraApiService {
     String? assignee,
   }) async {
     final params = <String, String>{
-      'startAt': '$startAt',
-      'maxResults': '$maxResults',
-      'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+      _paramStartAt: '$startAt',
+      _paramMaxResults: '$maxResults',
+      _paramFields: _fieldsBasic,
     };
     if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
       if (assignee == 'unassigned') {
-        params['jql'] = 'assignee is EMPTY';
+        params[_paramJql] = _jqlAssigneeEmpty;
       } else {
-        params['jql'] = 'assignee = "$assignee"';
+        params[_paramJql] = 'assignee = "$assignee"';
       }
     }
-    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/backlog').replace(queryParameters: params);
+    final uri = Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/backlog').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    List<dynamic> list = (json['issues'] as List<dynamic>?) ?? (json['values'] as List<dynamic>?) ?? [];
+    List<dynamic> list = (json[_jsonKeyIssues] as List<dynamic>?) ?? (json[_jsonKeyValues] as List<dynamic>?) ?? [];
     if (list.isEmpty && json['contents'] is Map) {
       final contents = json['contents'] as Map<String, dynamic>;
-      list = (contents['issues'] as List<dynamic>?) ?? (contents['values'] as List<dynamic>?) ?? [];
+      list = (contents[_jsonKeyIssues] as List<dynamic>?) ?? (contents[_jsonKeyValues] as List<dynamic>?) ?? [];
     }
     final issues = <JiraIssue>[];
     for (final e in list) {
@@ -558,26 +689,25 @@ class JiraApiService {
     int maxResults = 50,
     String? assignee,
   }) async {
-    final jql = StringBuffer('project = $projectKey AND sprint is EMPTY');
+    final jql = StringBuffer('project = $projectKey AND $_jqlSprintEmpty');
     if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
       if (assignee == 'unassigned') {
-        jql.write(' AND assignee is EMPTY');
+        jql.write(' AND $_jqlAssigneeEmpty');
       } else {
         jql.write(' AND assignee = "$assignee"');
       }
     }
-    const fields = 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint';
-    final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {
-      'jql': jql.toString(),
-      'startAt': '$startAt',
-      'maxResults': '$maxResults',
-      'fields': fields,
+    final uri = Uri.parse('$_baseUrl$_endpointApi3Search').replace(queryParameters: {
+      _paramJql: jql.toString(),
+      _paramStartAt: '$startAt',
+      _paramMaxResults: '$maxResults',
+      _paramFields: _fieldsBasic,
     });
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return (issues: <JiraIssue>[], hasMore: false, total: 0);
+    if (r.statusCode != HttpConstants.statusOk) return (issues: <JiraIssue>[], hasMore: false, total: 0);
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final list = (json['issues'] as List<dynamic>?) ?? [];
-    final total = (json['total'] as int?) ?? 0;
+    final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
+    final total = (json[_jsonKeyTotal] as int?) ?? 0;
     final issues = <JiraIssue>[];
     for (final e in list) {
       if (e is Map<String, dynamic>) {
@@ -605,16 +735,16 @@ class JiraApiService {
   }
 
   Future<JiraIssue?> getIssueDetails(String issueKey) async {
-    final key = _cacheKey('/rest/api/3/issue/$issueKey', {});
+    final key = _cacheKey('$_endpointApi3Issue/$issueKey', {});
     final cached = _getFromCache<JiraIssue>(key, _issueDetailsCacheMs);
     if (cached != null) return cached;
 
     final params = {
-      'fields': 'summary,description,status,priority,assignee,reporter,issuetype,created,updated,duedate,customfield_10016,comment,parent,attachment,project,sprint,customfield_10020,subtasks,issuelinks',
+      _paramFields: _fieldsIssueDetails,
     };
-    final uri = Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey').replace(queryParameters: params);
+    final uri = Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
 
     final json = jsonDecode(r.body) as Map<String, dynamic>;
     final issue = JiraIssue.fromJson(json);
@@ -626,10 +756,10 @@ class JiraApiService {
   Future<List<JiraRemoteLink>> getRemoteLinks(String issueKey) async {
     try {
       final r = await http.get(
-        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink'),
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/remotelink'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpConstants.statusOk) return [];
       final list = jsonDecode(r.body);
       if (list is! List) return [];
       return (list as List<dynamic>)
@@ -640,21 +770,62 @@ class JiraApiService {
     }
   }
 
+  /// Get pull requests linked to an issue via dev-status REST API.
+  /// Uses 1.0 endpoint for Bitbucket (stash); other application types use same path with their applicationType.
+  Future<List<JiraDevelopmentPullRequest>> getDevelopmentPullRequests(String issueKey) async {
+    if (issueKey.isEmpty) return [];
+    final results = <JiraDevelopmentPullRequest>[];
+    final seenUrls = <String>{};
+
+    for (final applicationType in ['stash', 'github']) {
+      try {
+        final uri = Uri.parse('$_baseUrl$_endpointDevStatusDetail').replace(
+          queryParameters: {
+            'issueKey': issueKey,
+            'applicationType': applicationType,
+            'dataType': 'pullrequest',
+          },
+        );
+        final r = await http.get(uri, headers: _headers).timeout(_timeout);
+        if (r.statusCode != HttpConstants.statusOk) continue;
+        final body = jsonDecode(r.body);
+        if (body is! Map) continue;
+        final detail = body['detail'];
+        if (detail is! List) continue;
+        for (final e in detail) {
+          if (e is! Map) continue;
+          final pr = e['pullRequest'] ?? e;
+          if (pr is Map<String, dynamic>) {
+            try {
+              final parsed = JiraDevelopmentPullRequest.fromJson(pr);
+              if (parsed.url.isNotEmpty && seenUrls.add(parsed.url)) {
+                results.add(parsed);
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {
+        // One integration may fail; continue with the other
+      }
+    }
+    return results;
+  }
+
   /// Try to get Confluence application id from applinks (for creating Confluence remote link).
   Future<String?> getConfluenceAppId() async {
     try {
       final r = await http.get(
-        Uri.parse('$_baseUrl/rest/applinks/3.0/applinks'),
+        Uri.parse('$_baseUrl$_endpointApplinks'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return null;
+      if (r.statusCode != HttpConstants.statusOk) return null;
       final list = jsonDecode(r.body);
       if (list is! List) return null;
       for (final e in list as List<dynamic>) {
         if (e is! Map) continue;
-        final type = stringFromJson(e['type']);
+        final type = stringFromJson(e[_jsonKeyType]);
         if (type != null && type.toLowerCase().contains('confluence')) {
-          final id = stringFromJson(e['id']);
+          final id = stringFromJson(e[_jsonKeyId]);
           if (id != null && id.isNotEmpty) return id;
         }
       }
@@ -684,26 +855,29 @@ class JiraApiService {
         : 'confluencePageId=$pid';
     final url = pageUrl.trim().isNotEmpty
         ? pageUrl.trim()
-        : '$_baseUrl/wiki/pages/viewpage.action?pageId=$pid';
+        : '$_baseUrl$_endpointWikiPage?pageId=$pid';
     final body = {
-      'globalId': globalId,
-      'application': {
-        'type': 'com.atlassian.confluence',
-        'name': 'Confluence',
+      _jsonKeyGlobalId: globalId,
+      _jsonKeyApplication: {
+        _jsonKeyType: _confluenceType,
+        _jsonKeyName: _confluenceName,
       },
-      'relationship': 'Wiki Page',
-      'object': {
-        'url': url,
-        'title': title.isNotEmpty ? title : 'Confluence Page',
+      _jsonKeyRelationship: _confluenceRelationship,
+      _jsonKeyObject: {
+        _jsonKeyUrl: url,
+        _jsonKeyTitle: title.isNotEmpty ? title : _confluencePageTitle,
       },
     };
     try {
       final r = await http.post(
-        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink'),
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/remotelink'),
         headers: _headers,
         body: jsonEncode(body),
       ).timeout(_timeout);
-      if (r.statusCode == 200 || r.statusCode == 201) return null;
+      if (r.statusCode == HttpConstants.statusOk || r.statusCode == HttpConstants.statusCreated) {
+        _clearIssueCache(issueKey);
+        return null;
+      }
       return r.body;
     } catch (e) {
       return e.toString();
@@ -714,10 +888,13 @@ class JiraApiService {
   Future<String?> deleteRemoteLink(String issueKey, int linkId) async {
     try {
       final r = await http.delete(
-        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/remotelink/$linkId'),
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/remotelink/$linkId'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode == 204 || r.statusCode == 200) return null;
+      if (r.statusCode == HttpConstants.statusNoContent || r.statusCode == HttpConstants.statusOk) {
+        _clearIssueCache(issueKey);
+        return null;
+      }
       return r.body;
     } catch (e) {
       return e.toString();
@@ -727,32 +904,31 @@ class JiraApiService {
   /// Fetch subtasks for an issue (JQL: parent = issueKey). Quoting the key for JQL safety.
   Future<List<JiraIssue>> getSubtasks(String issueKey) async {
     final jql = 'parent = "$issueKey"';
-    final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(
+    final uri = Uri.parse('$_baseUrl$_endpointApi3Search').replace(
       queryParameters: {
-        'jql': jql,
-        'maxResults': '50',
-        'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate',
+        _paramJql: jql,
+        _paramMaxResults: '50',
+        _paramFields: _fieldsEpic,
       },
     );
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != HttpConstants.statusOk) return [];
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final list = (json['issues'] as List<dynamic>?) ?? [];
+    final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
     return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   /// Fetch all issues that belong to an Epic (Task, Sub-task, Bug, Story, etc.). Tries parentEpic first, then parent = key.
   Future<List<JiraIssue>> getEpicChildren(String issueKey) async {
-    const fields = 'summary,status,priority,assignee,issuetype,created,updated,duedate';
-    final params = (String jql) => {'jql': jql, 'maxResults': '100', 'fields': fields};
+    final params = (String jql) => {_paramJql: jql, _paramMaxResults: '100', _paramFields: _fieldsEpic};
 
     // 1) parentEpic = key returns direct children + nested sub-tasks (all types) in Jira Cloud
     try {
-      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: params('parentEpic = "$issueKey"'));
+      final uri = Uri.parse('$_baseUrl$_endpointApi3Search').replace(queryParameters: params('parentEpic = "$issueKey"'));
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpConstants.statusOk) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
-        final list = (json['issues'] as List<dynamic>?) ?? [];
+        final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
         if (list.isNotEmpty) {
           return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
         }
@@ -761,11 +937,11 @@ class JiraApiService {
 
     // 2) Fallback: parent = key (direct children – Task, Bug, Story, Sub-task under Epic)
     try {
-      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: params('parent = "$issueKey"'));
+      final uri = Uri.parse('$_baseUrl$_endpointApi3Search').replace(queryParameters: params('parent = "$issueKey"'));
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpConstants.statusOk) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
-        final list = (json['issues'] as List<dynamic>?) ?? [];
+        final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
         if (list.isNotEmpty) {
           return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
         }
@@ -775,11 +951,11 @@ class JiraApiService {
     // 3) Fallback: "Epic Link" = key (classic/company-managed projects using Epic Link field)
     try {
       final jql = '"Epic Link" = "$issueKey"';
-      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {'jql': jql, 'maxResults': '100', 'fields': fields});
+      final uri = Uri.parse('$_baseUrl$_endpointApi3Search').replace(queryParameters: {_paramJql: jql, _paramMaxResults: '100', _paramFields: _fieldsEpic});
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode == 200) {
+      if (r.statusCode == HttpConstants.statusOk) {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
-        final list = (json['issues'] as List<dynamic>?) ?? [];
+        final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
         return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
       }
     } catch (_) {}
@@ -791,12 +967,12 @@ class JiraApiService {
   Future<List<Map<String, dynamic>>> getTransitions(String issueKey) async {
     try {
       final r = await http.get(
-        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/transitions'),
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/transitions'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpConstants.statusOk) return [];
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      final list = json['transitions'] as List<dynamic>?;
+      final list = json[_jsonKeyTransitions] as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => e as Map<String, dynamic>).toList();
     } catch (_) {
@@ -808,12 +984,12 @@ class JiraApiService {
   Future<String?> transitionIssue(String issueKey, String transitionId) async {
     try {
       final r = await http.post(
-        Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/transitions'),
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/transitions'),
         headers: _headers,
-        body: jsonEncode({'transition': {'id': transitionId}}),
+        body: jsonEncode({_jsonKeyTransition: {_jsonKeyId: transitionId}}),
       ).timeout(_timeout);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
-        _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+        _clearIssueCache(issueKey);
         return null;
       }
       return r.body;
@@ -825,11 +1001,11 @@ class JiraApiService {
   /// Get users assignable to an issue. GET /rest/api/3/user/assignable/search.
   Future<List<JiraUser>> getAssignableUsers(String issueKey, {String? query}) async {
     try {
-      final params = <String, String>{'issueKey': issueKey, 'maxResults': '50'};
-      if (query != null && query.isNotEmpty) params['query'] = query;
-      final uri = Uri.parse('$_baseUrl/rest/api/3/user/assignable/search').replace(queryParameters: params);
+      final params = <String, String>{'issueKey': issueKey, _paramMaxResults: '50'};
+      if (query != null && query.isNotEmpty) params[_paramQuery] = query;
+      final uri = Uri.parse('$_baseUrl$_endpointApi3UserAssignableSearch').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpConstants.statusOk) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => JiraUser.fromJson(e as Map<String, dynamic>)).toList();
@@ -841,8 +1017,8 @@ class JiraApiService {
   /// Get all priorities. GET /rest/api/3/priority.
   Future<List<Map<String, dynamic>>> getPriorities() async {
     try {
-      final r = await http.get(Uri.parse('$_baseUrl/rest/api/3/priority'), headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      final r = await http.get(Uri.parse('$_baseUrl$_endpointApi3Priority'), headers: _headers).timeout(_timeout);
+      if (r.statusCode != HttpConstants.statusOk) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => e as Map<String, dynamic>).toList();
@@ -853,27 +1029,27 @@ class JiraApiService {
 
   /// Update issue fields (assignee, priority, duedate, summary, description, customfield_10016, etc.). Same as reference.
   Future<String?> updateIssueField(String issueKey, Map<String, dynamic> fields) async {
-    final body = jsonEncode({'fields': fields});
-    final r = await http.put(
-      Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey'),
-      headers: _headers,
-      body: body,
-    ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      _setCache(_cacheKey('/rest/api/3/issue/$issueKey', {}), null);
-      return null;
-    }
+    final body = jsonEncode({_jsonKeyFields: fields});
+      final r = await http.put(
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey'),
+        headers: _headers,
+        body: body,
+      ).timeout(_timeout);
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+        _clearIssueCache(issueKey);
+        return null;
+      }
     return r.body;
   }
 
   Future<List<dynamic>> getIssueComments(String issueKey) async {
-    final uri = Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/comment').replace(
-      queryParameters: {'expand': 'renderedBody'},
+    final uri = Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/comment').replace(
+      queryParameters: {_paramExpand: _jsonKeyRenderedBody},
     );
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) return [];
+    if (r.statusCode != HttpConstants.statusOk) return [];
     final json = jsonDecode(r.body) as Map<String, dynamic>;
-    return (json['comments'] as List<dynamic>?) ?? [];
+    return (json[_jsonKeyComments] as List<dynamic>?) ?? [];
   }
 
   /// Invisible markers in comment text: zwsp~zwsp + accountId + sep + displayName + zwsp~zwsp (user sees only "@displayName").
@@ -979,15 +1155,15 @@ class JiraApiService {
   Future<String?> addComment(String issueKey, String text, {String? parentCommentId}) async {
     final payload = _commentBodyAdf(text);
     if (parentCommentId != null && parentCommentId.isNotEmpty) {
-      payload['parent'] = {'id': parentCommentId};
+      payload[_jsonKeyParent] = {_jsonKeyId: parentCommentId};
     }
     final r = await http.post(
-      Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/comment'),
+      Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/comment'),
       headers: _headers,
       body: jsonEncode(payload),
     ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
+    if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+      _clearIssueCache(issueKey);
       return null;
     }
     return r.body;
@@ -997,12 +1173,12 @@ class JiraApiService {
   Future<String?> updateComment(String issueKey, String commentId, String text) async {
     final body = _commentBodyAdf(text);
     final r = await http.put(
-      Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/comment/$commentId'),
+      Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/comment/$commentId'),
       headers: _headers,
       body: jsonEncode(body),
     ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
+    if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+      _clearIssueCache(issueKey);
       return null;
     }
     return r.body;
@@ -1010,26 +1186,26 @@ class JiraApiService {
 
   /// Delete comment. Returns error message or null on success.
   Future<String?> deleteComment(String issueKey, String commentId) async {
-    final r = await http.delete(
-      Uri.parse('$_baseUrl/rest/api/3/issue/$issueKey/comment/$commentId'),
-      headers: _headers,
-    ).timeout(_timeout);
-    if (r.statusCode >= 200 && r.statusCode < 300) {
-      _setCache(_cacheKey('/rest/api/3/issue/$issueKey/comment', {}), null);
-      return null;
-    }
+      final r = await http.delete(
+        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey/comment/$commentId'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+        _clearIssueCache(issueKey);
+        return null;
+      }
     return r.body;
   }
 
   Future<void> completeSprint(int sprintId) async {
     final r = await http
         .post(
-          Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'),
+          Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'),
           headers: _headers,
-          body: jsonEncode({'state': 'closed'}),
+          body: jsonEncode({_jsonKeyState: _sprintStateClosed}),
         )
         .timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
     clearCache();
   }
 
@@ -1037,12 +1213,12 @@ class JiraApiService {
   Future<void> startSprint(int sprintId) async {
     final r = await http
         .post(
-          Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'),
+          Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'),
           headers: _headers,
-          body: jsonEncode({'state': 'active'}),
+          body: jsonEncode({_jsonKeyState: _sprintStateActive}),
         )
         .timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
     clearCache();
   }
 
@@ -1055,18 +1231,18 @@ class JiraApiService {
     String? endDate,
   }) async {
     try {
-      final body = <String, dynamic>{'name': name};
-      if (goal != null) body['goal'] = goal;
-      if (startDate != null) body['startDate'] = startDate;
-      if (endDate != null) body['endDate'] = endDate;
+      final body = <String, dynamic>{_jsonKeyName: name};
+      if (goal != null) body[_jsonKeyGoal] = goal;
+      if (startDate != null) body[_jsonKeyStartDate] = startDate;
+      if (endDate != null) body[_jsonKeyEndDate] = endDate;
       final r = await http
           .put(
-            Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'),
+            Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'),
             headers: _headers,
             body: jsonEncode(body),
           )
           .timeout(_timeout);
-      if (r.statusCode != 200) return 'Failed to update sprint: ${r.statusCode}';
+      if (r.statusCode != HttpConstants.statusOk) return 'Failed to update sprint: ${r.statusCode}';
       clearCache();
       return null;
     } catch (e) {
@@ -1079,9 +1255,9 @@ class JiraApiService {
   Future<String?> deleteSprint(int sprintId) async {
     try {
       final r = await http
-          .delete(Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'), headers: _headers)
+          .delete(Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'), headers: _headers)
           .timeout(_timeout);
-      if (r.statusCode != 200 && r.statusCode != 204) return 'Failed to delete sprint: ${r.statusCode}';
+      if (r.statusCode != HttpConstants.statusOk && r.statusCode != HttpConstants.statusNoContent) return 'Failed to delete sprint: ${r.statusCode}';
       clearCache();
       return null;
     } catch (e) {
@@ -1093,15 +1269,15 @@ class JiraApiService {
   Future<List<Map<String, dynamic>>> getIssueTypesForProject(String projectKey) async {
     try {
       final r = await http.get(
-        Uri.parse('$_baseUrl/rest/api/3/project/$projectKey/statuses'),
+        Uri.parse('$_baseUrl$_endpointApi3ProjectStatuses/$projectKey/statuses'),
         headers: _headers,
       ).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpConstants.statusOk) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => {
-        'id': e['id'].toString(),
-        'name': stringFromJson(e['name']) ?? '',
+        _jsonKeyId: e[_jsonKeyId].toString(),
+        _jsonKeyName: stringFromJson(e[_jsonKeyName]) ?? '',
         'description': stringFromJson(e['description']) ?? '',
       }).toList();
     } catch (_) {
@@ -1112,11 +1288,11 @@ class JiraApiService {
   /// Get assignable users for a project. GET /rest/api/3/user/assignable/search
   Future<List<JiraUser>> getAssignableUsersForProject(String projectKey, {String? query}) async {
     try {
-      final params = <String, String>{'project': projectKey, 'maxResults': '50'};
-      if (query != null && query.isNotEmpty) params['query'] = query;
-      final uri = Uri.parse('$_baseUrl/rest/api/3/user/assignable/search').replace(queryParameters: params);
+      final params = <String, String>{_paramProject: projectKey, _paramMaxResults: '50'};
+      if (query != null && query.isNotEmpty) params[_paramQuery] = query;
+      final uri = Uri.parse('$_baseUrl$_endpointApi3UserAssignableSearch').replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return [];
+      if (r.statusCode != HttpConstants.statusOk) return [];
       final list = jsonDecode(r.body) as List<dynamic>?;
       if (list == null) return [];
       return list.map((e) => JiraUser.fromJson(e as Map<String, dynamic>)).toList();
@@ -1128,25 +1304,25 @@ class JiraApiService {
   /// Search issues with JQL. POST /rest/api/3/search/jql (matching React Native implementation)
   Future<List<JiraIssue>> searchIssues(String jql, {int maxResults = 50}) async {
     try {
-      final uri = Uri.parse('$_baseUrl/rest/api/3/search/jql');
+      final uri = Uri.parse('$_baseUrl$_endpointApi3SearchJql');
       final body = jsonEncode({
-        'jql': jql,
-        'maxResults': maxResults,
-        'fields': ['summary', 'description', 'status', 'priority', 'assignee', 'issuetype', 'created', 'updated'],
+        _paramJql: jql,
+        _paramMaxResults: maxResults,
+        _paramFields: _fieldsSearch.split(',').map((e) => e.trim()).toList(),
       });
       final r = await http.post(
         uri,
-        headers: {..._headers, 'Content-Type': 'application/json'},
+        headers: {..._headers, HttpConstants.headerContentType: HttpConstants.contentTypeJson},
         body: body,
       ).timeout(_timeout);
       
-      if (r.statusCode != 200) {
+      if (r.statusCode != HttpConstants.statusOk) {
         debugPrint('JQL search error: ${r.statusCode} ${r.body}');
         return [];
       }
       
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      final list = (json['issues'] as List<dynamic>?) ?? [];
+      final list = (json[_jsonKeyIssues] as List<dynamic>?) ?? [];
       return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
     } catch (e) {
       debugPrint('JQL search exception: $e');
@@ -1170,47 +1346,47 @@ class JiraApiService {
   }) async {
     try {
       final fields = <String, dynamic>{
-        'project': {'key': projectKey},
-        'issuetype': {'id': issueTypeId},
-        'summary': summary,
+        _fieldProject: {_jsonKeyKey: projectKey},
+        _fieldIssueType: {_jsonKeyId: issueTypeId},
+        _fieldSummary: summary,
       };
 
       if (descriptionAdf != null) {
-        fields['description'] = descriptionAdf;
+        fields[_fieldDescription] = descriptionAdf;
       } else if (description != null && description.isNotEmpty) {
-        fields['description'] = descriptionAdfFromPlainText(description);
+        fields[_fieldDescription] = descriptionAdfFromPlainText(description);
       }
 
       if (assigneeAccountId != null && assigneeAccountId.isNotEmpty) {
-        fields['assignee'] = {'accountId': assigneeAccountId};
+        fields[_fieldAssignee] = {_paramAccountId: assigneeAccountId};
       }
 
       if (priorityId != null && priorityId.isNotEmpty) {
-        fields['priority'] = {'id': priorityId};
+        fields[_fieldPriority] = {_jsonKeyId: priorityId};
       }
 
       if (dueDate != null && dueDate.isNotEmpty) {
-        fields['duedate'] = dueDate;
+        fields[_fieldDueDate] = dueDate;
       }
 
       if (storyPoints != null) {
-        fields['customfield_10016'] = storyPoints;
+        fields[_fieldCustomfield10016] = storyPoints;
       }
 
       if (parentKey != null && parentKey.isNotEmpty) {
-        fields['parent'] = {'key': parentKey};
+        fields[_fieldParent] = {_jsonKeyKey: parentKey};
       }
 
-      final body = jsonEncode({'fields': fields});
+      final body = jsonEncode({_jsonKeyFields: fields});
       final r = await http.post(
-        Uri.parse('$_baseUrl/rest/api/3/issue'),
+        Uri.parse('$_baseUrl$_endpointApi3Issue'),
         headers: _headers,
         body: body,
       ).timeout(_timeout);
 
-      if (r.statusCode >= 200 && r.statusCode < 300) {
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
         final responseJson = jsonDecode(r.body) as Map<String, dynamic>;
-        final issueKey = responseJson['key'] as String?;
+        final issueKey = responseJson[_jsonKeyKey] as String?;
         
         // If sprint is specified, move the issue to the sprint
         if (sprintId != null && issueKey != null) {
@@ -1224,11 +1400,11 @@ class JiraApiService {
       // Parse error message
       try {
         final errorJson = jsonDecode(r.body) as Map<String, dynamic>;
-        final errorMessages = errorJson['errorMessages'] as List<dynamic>?;
+        final errorMessages = errorJson[_jsonKeyErrorMessages] as List<dynamic>?;
         if (errorMessages != null && errorMessages.isNotEmpty) {
           return errorMessages.join(', ');
         }
-        final errors = errorJson['errors'] as Map<String, dynamic>?;
+        final errors = errorJson[_jsonKeyErrors] as Map<String, dynamic>?;
         if (errors != null && errors.isNotEmpty) {
           return errors.values.join(', ');
         }
@@ -1243,12 +1419,19 @@ class JiraApiService {
   /// Move an issue to a sprint. POST /rest/agile/1.0/sprint/{sprintId}/issue
   Future<void> _moveIssueToSprint(String issueKey, int sprintId) async {
     try {
-      final body = jsonEncode({'issues': [issueKey]});
-      await http.post(
-        Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId/issue'),
+      final body = jsonEncode({_jsonKeyIssues: [issueKey]});
+      final r = await http.post(
+        Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId/issue'),
         headers: _headers,
         body: body,
       ).timeout(_timeout);
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+        _clearIssueCache(issueKey);
+        // Clear board caches since sprint assignment affects board views
+        _cache.removeWhere((key, _) => 
+          key.contains(_endpointAgileBoard) && 
+          (key.contains('/issue') || key.contains('/sprint') || key.contains('/backlog')));
+      }
     } catch (_) {
       // Ignore errors when moving to sprint
     }
@@ -1257,19 +1440,24 @@ class JiraApiService {
   /// Move an issue to a sprint (public). Returns error message or null on success.
   Future<String?> moveIssueToSprint(String issueKey, int sprintId) async {
     try {
-      final body = jsonEncode({'issues': [issueKey]});
+      final body = jsonEncode({_jsonKeyIssues: [issueKey]});
       final r = await http.post(
-        Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId/issue'),
+        Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId/issue'),
         headers: _headers,
         body: body,
       ).timeout(_timeout);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
-        _cache.remove(_cacheKey('/rest/api/3/issue/$issueKey', {}));
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+        _clearIssueCache(issueKey);
+        // Clear board caches since sprint assignment affects board views
+        // Extract boardId from sprint if possible, otherwise clear all board caches
+        _cache.removeWhere((key, _) => 
+          key.contains(_endpointAgileBoard) && 
+          (key.contains('/issue') || key.contains('/sprint') || key.contains('/backlog')));
         return null;
       }
       try {
         final err = jsonDecode(r.body) as Map<String, dynamic>;
-        final msgs = err['errorMessages'] as List<dynamic>?;
+        final msgs = err[_jsonKeyErrorMessages] as List<dynamic>?;
         if (msgs != null && msgs.isNotEmpty) return msgs.join(', ');
       } catch (_) {}
       return 'Failed to move issue: ${r.statusCode}';
@@ -1281,19 +1469,20 @@ class JiraApiService {
   /// Move an issue to the backlog for a board. POST /rest/agile/1.0/backlog/{boardId}/issue
   Future<String?> moveIssueToBacklog(String issueKey, int boardId) async {
     try {
-      final body = jsonEncode({'issues': [issueKey]});
+      final body = jsonEncode({_jsonKeyIssues: [issueKey]});
       final r = await http.post(
-        Uri.parse('$_baseUrl/rest/agile/1.0/backlog/$boardId/issue'),
+        Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/backlog/issue'),
         headers: _headers,
         body: body,
       ).timeout(_timeout);
-      if (r.statusCode >= 200 && r.statusCode < 300) {
-        _cache.remove(_cacheKey('/rest/api/3/issue/$issueKey', {}));
+      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+        _clearIssueCache(issueKey);
+        _clearBoardCache(boardId);
         return null;
       }
       try {
         final err = jsonDecode(r.body) as Map<String, dynamic>;
-        final msgs = err['errorMessages'] as List<dynamic>?;
+        final msgs = err[_jsonKeyErrorMessages] as List<dynamic>?;
         if (msgs != null && msgs.isNotEmpty) return msgs.join(', ');
       } catch (_) {}
       return 'Failed to move to backlog: ${r.statusCode}';

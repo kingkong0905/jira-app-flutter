@@ -176,6 +176,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   List<JiraRemoteLink> _confluenceLinks = [];
   bool _loadingConfluenceLinks = false;
   int? _deletingConfluenceLinkId;
+  // Pull Requests (GitHub – from remote links and dev-status API)
+  List<JiraRemoteLink> _pullRequestLinks = [];
+  List<JiraDevelopmentPullRequest> _devPullRequests = [];
   // Epic children (when issue is Epic)
   List<JiraIssue> _epicChildren = [];
   bool _loadingEpicChildren = false;
@@ -463,10 +466,15 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     setState(() => _loadingConfluenceLinks = true);
     try {
       final list = await api.getRemoteLinks(widget.issueKey);
-      if (mounted) setState(() {
+      if (!mounted) return;
+      setState(() {
         _confluenceLinks = list.where((l) => l.isConfluence).toList();
-        _loadingConfluenceLinks = false;
+        _pullRequestLinks = list.where((l) => l.isGitHubPullRequest).toList();
       });
+      // Load dev-status PRs (GitHub/Bitbucket for Jira) using issue key (Data Center/Server)
+      final devPrs = await api.getDevelopmentPullRequests(widget.issueKey);
+      if (mounted) setState(() => _devPullRequests = devPrs);
+      if (mounted) setState(() => _loadingConfluenceLinks = false);
     } catch (_) {
       if (mounted) setState(() => _loadingConfluenceLinks = false);
     }
@@ -653,6 +661,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                             const SizedBox(height: 8),
                             _buildLinkedWorkItemsSection(),
                           ],
+                          const SizedBox(height: 24),
+                          _buildDevelopmentSection(),
                           const SizedBox(height: 24),
                           Text(AppLocalizations.of(context).confluence, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                           const SizedBox(height: 8),
@@ -2404,6 +2414,220 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  /// Parse GitHub PR URL for repo (owner/repo) and PR number.
+  static ({String? repo, String? prId}) _parseGitHubPrUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (!uri.host.toLowerCase().contains('github.com')) return (repo: null, prId: null);
+      final pathSegments = uri.pathSegments;
+      final pullIdx = pathSegments.indexOf('pull');
+      if (pullIdx < 2 || pullIdx >= pathSegments.length - 1) return (repo: null, prId: null);
+      final owner = pathSegments[0];
+      final repoName = pathSegments[1];
+      final prNum = pathSegments[pullIdx + 1];
+      return (repo: '$owner/$repoName', prId: '#$prNum');
+    } catch (_) {
+      return (repo: null, prId: null);
+    }
+  }
+
+  List<PullRequestRow> _buildPullRequestRows() {
+    final seenUrls = <String>{};
+    final rows = <PullRequestRow>[];
+    for (final link in _pullRequestLinks) {
+      if (link.url.isEmpty || !seenUrls.add(link.url)) continue;
+      final parsed = _parseGitHubPrUrl(link.url);
+      rows.add(PullRequestRow(
+        url: link.url,
+        title: link.title.isNotEmpty ? link.title : 'Pull Request',
+        id: parsed.prId ?? '#—',
+        repositoryName: parsed.repo,
+      ));
+    }
+    for (final pr in _devPullRequests) {
+      if (pr.url.isEmpty || !seenUrls.add(pr.url)) continue;
+      rows.add(PullRequestRow(
+        url: pr.url,
+        title: pr.name,
+        id: pr.id != null ? '#${pr.id}' : _parseGitHubPrUrl(pr.url).prId ?? '#—',
+        authorName: pr.authorName,
+        authorAvatarUrl: pr.authorAvatarUrl,
+        branchText: pr.sourceBranch != null && pr.targetBranch != null
+            ? '${pr.sourceBranch} → ${pr.targetBranch}'
+            : (pr.sourceBranch ?? pr.targetBranch),
+        status: pr.status,
+        updated: pr.updated,
+        repositoryName: pr.repositoryName ?? _parseGitHubPrUrl(pr.url).repo,
+      ));
+    }
+    return rows;
+  }
+
+  /// Development section: title, tabs, repository, and PR table (Author | ID | Summary | Status | Updated).
+  Widget _buildDevelopmentSection() {
+    final colorScheme = Theme.of(context).colorScheme;
+    if (_loadingConfluenceLinks) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))),
+      );
+    }
+    final rows = _buildPullRequestRows();
+    final repoName = rows.isNotEmpty
+        ? (rows.first.repositoryName != null ? '${rows.first.repositoryName} (GitHub)' : 'GitHub')
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('${AppLocalizations.of(context).development} ${widget.issueKey}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
+        const SizedBox(height: 12),
+        // Tabs: Pull requests selected
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildDevTab(AppLocalizations.of(context).branches, false),
+              _buildDevTab(AppLocalizations.of(context).commits, false),
+              _buildDevTab(AppLocalizations.of(context).pullRequests, true),
+              _buildDevTab(AppLocalizations.of(context).builds, false),
+              _buildDevTab(AppLocalizations.of(context).deployments, false),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (repoName != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GestureDetector(
+              onTap: rows.isNotEmpty ? () => url_launcher.launchUrl(Uri.parse(rows.first.url), mode: url_launcher.LaunchMode.externalApplication) : null,
+              child: Text(repoName, style: TextStyle(fontSize: 13, color: colorScheme.primary, decoration: TextDecoration.underline)),
+            ),
+          ),
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(AppLocalizations.of(context).noPullRequestsLinked, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: colorScheme.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                // Table header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: const BorderRadius.vertical(top: Radius.circular(7))),
+                  child: Row(
+                    children: [
+                      SizedBox(width: 40, child: Text(AppLocalizations.of(context).author, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant))),
+                      const SizedBox(width: 8),
+                      SizedBox(width: 56, child: Text(AppLocalizations.of(context).id, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant))),
+                      const SizedBox(width: 8),
+                      Expanded(flex: 3, child: Text(AppLocalizations.of(context).summary, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant))),
+                      const SizedBox(width: 8),
+                      SizedBox(width: 72, child: Text(AppLocalizations.of(context).status, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant))),
+                      const SizedBox(width: 8),
+                      SizedBox(width: 72, child: Text(AppLocalizations.of(context).updated, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant))),
+                    ],
+                  ),
+                ),
+                ...rows.map((row) => _buildPullRequestTableRow(row, colorScheme)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildDevTab(String label, bool selected) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Material(
+        color: selected ? colorScheme.primaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: () {},
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Text(label, style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w600 : FontWeight.normal, color: selected ? colorScheme.onPrimaryContainer : colorScheme.onSurface)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPullRequestTableRow(PullRequestRow row, ColorScheme colorScheme) {
+    return Material(
+      color: colorScheme.surface,
+      child: InkWell(
+        onTap: () => url_launcher.launchUrl(Uri.parse(row.url), mode: url_launcher.LaunchMode.externalApplication),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: colorScheme.outlineVariant))),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 40,
+                child: row.authorAvatarUrl != null && row.authorAvatarUrl!.isNotEmpty
+                    ? CircleAvatar(radius: 14, backgroundImage: NetworkImage(row.authorAvatarUrl!), backgroundColor: colorScheme.surfaceContainerHighest)
+                    : CircleAvatar(radius: 14, backgroundColor: colorScheme.surfaceContainerHighest, child: Text((row.authorName ?? '?').isNotEmpty ? (row.authorName!.substring(0, 1).toUpperCase()) : '?', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant))),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(width: 56, child: Text(row.id, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: colorScheme.primary))),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(row.title, style: TextStyle(fontSize: 13, color: colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    if (row.branchText != null && row.branchText!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(4)),
+                            child: Text(row.branchText!, style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 72,
+                child: row.status != null && row.status!.isNotEmpty
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: row.status!.toUpperCase() == 'MERGED' ? const Color(0xFF00875A).withValues(alpha: 0.15) : colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(row.status!, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: row.status!.toUpperCase() == 'MERGED' ? const Color(0xFF00875A) : colorScheme.onSurface)),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(width: 72, child: Text(row.updated ?? '—', style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant))),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

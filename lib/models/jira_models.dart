@@ -531,4 +531,83 @@ class JiraRemoteLink {
       applicationType != null &&
       (applicationType!.toLowerCase().contains('confluence') ||
           relationship == 'Wiki Page');
+
+  /// True if this link is a GitHub pull request (shown in Pull Requests section).
+  bool get isGitHubPullRequest {
+    if (url.isEmpty) return false;
+    final u = url.toLowerCase();
+    return u.contains('github.com') && u.contains('/pull/');
+  }
+}
+
+/// Pull request from Jira dev-status API (GitHub for Jira integration).
+class JiraDevelopmentPullRequest {
+  final String url;
+  final String name;
+  final String? status;
+  final String? id; // PR number e.g. "19738"
+  final String? authorName;
+  final String? authorAvatarUrl;
+  final String? sourceBranch;
+  final String? targetBranch;
+  final String? repositoryName; // e.g. "owner/repo"
+  final String? updated; // e.g. "5 days ago" or ISO date
+
+  JiraDevelopmentPullRequest({
+    required this.url,
+    required this.name,
+    this.status,
+    this.id,
+    this.authorName,
+    this.authorAvatarUrl,
+    this.sourceBranch,
+    this.targetBranch,
+    this.repositoryName,
+    this.updated,
+  });
+
+  factory JiraDevelopmentPullRequest.fromJson(Map<String, dynamic> json) {
+    final author = json['author'] as Map<String, dynamic>?;
+    final repo = json['repository'] as Map<String, dynamic>?;
+    final idVal = json['id'] ?? json['key'] ?? json['number'];
+    final source = json['source'] as Map<String, dynamic>?;
+    final dest = json['destination'] as Map<String, dynamic>? ?? json['target'] as Map<String, dynamic>?;
+    return JiraDevelopmentPullRequest(
+      url: stringFromJson(json['url']) ?? '',
+      name: stringFromJson(json['name']) ?? stringFromJson(json['title']) ?? 'Pull Request',
+      status: stringFromJson(json['status'] ?? json['state']),
+      id: idVal != null ? idVal.toString() : null,
+      authorName: author != null ? stringFromJson(author['name'] ?? author['displayName']) : null,
+      authorAvatarUrl: author != null ? stringFromJson(author['avatar'] ?? author['avatarUrl']) : null,
+      sourceBranch: stringFromJson(json['sourceBranch'] ?? source?['branch'] ?? source?['name']),
+      targetBranch: stringFromJson(json['targetBranch'] ?? dest?['branch'] ?? dest?['name']),
+      repositoryName: repo != null ? stringFromJson(repo['name'] ?? repo['fullName']) : null,
+      updated: stringFromJson(json['updated'] ?? json['updatedDate'] ?? json['lastUpdated']),
+    );
+  }
+}
+
+/// Unified PR row for the Development panel (from remote links or dev-status).
+class PullRequestRow {
+  final String url;
+  final String title;
+  final String id; // e.g. "#19738"
+  final String? authorName;
+  final String? authorAvatarUrl;
+  final String? branchText; // e.g. "ft-ET-1574 → master"
+  final String? status; // MERGED, OPEN, etc.
+  final String? updated;
+  final String? repositoryName; // e.g. "Thinkei/ats"
+
+  PullRequestRow({
+    required this.url,
+    required this.title,
+    required this.id,
+    this.authorName,
+    this.authorAvatarUrl,
+    this.branchText,
+    this.status,
+    this.updated,
+    this.repositoryName,
+  });
 }

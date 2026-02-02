@@ -188,6 +188,17 @@ class AppLocalizations {
       'noLinkedWorkItems': 'No linked work items.',
       'issuesInThisEpic': 'Issues in this Epic',
       'noIssuesInThisEpic': 'No issues in this Epic.',
+      'development': 'Development',
+      'branches': 'Branches',
+      'commits': 'Commits',
+      'pullRequests': 'Pull Requests',
+      'noPullRequestsLinked': 'No GitHub pull requests linked.',
+      'builds': 'Builds',
+      'deployments': 'Deployments',
+      'author': 'Author',
+      'id': 'ID',
+      'status': 'Status',
+      'updated': 'Updated',
       'confluence': 'Confluence',
       'linkConfluencePage': 'Link Confluence page',
       'noConfluencePagesLinked': 'No Confluence pages linked.',
@@ -394,6 +405,17 @@ class AppLocalizations {
       'noLinkedWorkItems': 'Chưa có công việc liên kết.',
       'issuesInThisEpic': 'Công việc trong Epic này',
       'noIssuesInThisEpic': 'Chưa có công việc nào trong Epic này.',
+      'development': 'Development',
+      'branches': 'Branches',
+      'commits': 'Commits',
+      'pullRequests': 'Pull Requests',
+      'noPullRequestsLinked': 'Chưa có pull request GitHub nào được liên kết.',
+      'builds': 'Builds',
+      'deployments': 'Deployments',
+      'author': 'Tác giả',
+      'id': 'ID',
+      'status': 'Trạng thái',
+      'updated': 'Cập nhật',
       'confluence': 'Confluence',
       'linkConfluencePage': 'Liên kết trang Confluence',
       'noConfluencePagesLinked': 'Chưa có trang Confluence nào được liên kết.',
@@ -599,6 +621,17 @@ class AppLocalizations {
   String get noLinkedWorkItems => _s('noLinkedWorkItems');
   String get issuesInThisEpic => _s('issuesInThisEpic');
   String get noIssuesInThisEpic => _s('noIssuesInThisEpic');
+  String get development => _s('development');
+  String get branches => _s('branches');
+  String get commits => _s('commits');
+  String get pullRequests => _s('pullRequests');
+  String get noPullRequestsLinked => _s('noPullRequestsLinked');
+  String get builds => _s('builds');
+  String get deployments => _s('deployments');
+  String get author => _s('author');
+  String get id => _s('id');
+  String get status => _s('status');
+  String get updated => _s('updated');
   String get confluence => _s('confluence');
   String get linkConfluencePage => _s('linkConfluencePage');
   String get noConfluencePagesLinked => _s('noConfluencePagesLinked');
