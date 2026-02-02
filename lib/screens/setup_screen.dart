@@ -173,18 +173,19 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   Widget _buildStep1() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           AppLocalizations.of(context).step1Of2,
-          style: TextStyle(fontSize: 14, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
           AppLocalizations.of(context).enterApiToken,
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
         ),
         const SizedBox(height: 24),
         TextField(
@@ -196,7 +197,7 @@ class _SetupScreenState extends State<SetupScreen> {
             prefixIcon: const Icon(Icons.key),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: AppTheme.surfaceMuted,
+            fillColor: colorScheme.surfaceContainerHighest,
           ),
           onSubmitted: (_) => _nextStep(),
         ),
@@ -204,7 +205,7 @@ class _SetupScreenState extends State<SetupScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: AppTheme.primaryBg,
+            color: colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -215,7 +216,7 @@ class _SetupScreenState extends State<SetupScreen> {
               Expanded(
                 child: Text(
                   AppLocalizations.of(context).getApiTokenFrom,
-                  style: TextStyle(fontSize: 13, color: AppTheme.primary, height: 1.4),
+                  style: TextStyle(fontSize: 13, color: colorScheme.primary, height: 1.4),
                 ),
               ),
             ],
@@ -225,36 +226,38 @@ class _SetupScreenState extends State<SetupScreen> {
         FilledButton(
           onPressed: _nextStep,
           style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.primary,
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
             padding: const EdgeInsets.symmetric(vertical: 18),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: Text(AppLocalizations.of(context).next, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          child: Text(AppLocalizations.of(context).next, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: colorScheme.onPrimary)),
         ),
       ],
     );
   }
 
   Widget _buildStep2() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         TextButton.icon(
           onPressed: _loading ? null : _back,
-          icon: const Icon(Icons.arrow_back, size: 20),
-          label: Text(AppLocalizations.of(context).back),
-          style: TextButton.styleFrom(foregroundColor: AppTheme.primary),
+          icon: Icon(Icons.arrow_back, size: 20, color: colorScheme.primary),
+          label: Text(AppLocalizations.of(context).back, style: TextStyle(color: colorScheme.primary)),
+          style: TextButton.styleFrom(foregroundColor: colorScheme.primary),
         ),
         const SizedBox(height: 8),
         Text(
           AppLocalizations.of(context).step2Of2,
-          style: TextStyle(fontSize: 14, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         Text(
           AppLocalizations.of(context).connectToJiraWorkspace,
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
         ),
         const SizedBox(height: 24),
         TextField(
@@ -267,7 +270,7 @@ class _SetupScreenState extends State<SetupScreen> {
             prefixIcon: const Icon(Icons.email),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: AppTheme.surfaceMuted,
+            fillColor: colorScheme.surfaceContainerHighest,
           ),
         ),
         const SizedBox(height: 16),
@@ -282,24 +285,25 @@ class _SetupScreenState extends State<SetupScreen> {
             prefixIcon: const Icon(Icons.link),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: AppTheme.surfaceMuted,
+            fillColor: colorScheme.surfaceContainerHighest,
           ),
         ),
         const SizedBox(height: 28),
         FilledButton(
           onPressed: _loading ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: AppTheme.primary,
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
             padding: const EdgeInsets.symmetric(vertical: 18),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: _loading
-              ? const SizedBox(
+              ? SizedBox(
                   height: 24,
                   width: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.onPrimary),
                 )
-              : Text(AppLocalizations.of(context).letsGo, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              : Text(AppLocalizations.of(context).letsGo, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: colorScheme.onPrimary)),
         ),
       ],
     );

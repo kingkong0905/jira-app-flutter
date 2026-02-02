@@ -161,13 +161,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textPrimary),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Theme.of(context).colorScheme.onSurface),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
           Text(
             subtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
         const SizedBox(height: AppTheme.spaceLg),
@@ -236,7 +236,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: AppTheme.spaceSm),
                 Text(
                   AppLocalizations.of(context).apiTokenHint,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: AppTheme.spaceLg),
                 FilledButton(
@@ -263,13 +263,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).cardTheme.color ?? AppTheme.surfaceCard,
+                      color: Theme.of(context).cardTheme.color ?? Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.border),
+                      border: Border.all(color: Theme.of(context).colorScheme.outline),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.dashboard_outlined, size: 22, color: AppTheme.textMuted),
+                        Icon(Icons.dashboard_outlined, size: 22, color: Theme.of(context).colorScheme.onSurfaceVariant),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
@@ -279,7 +279,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             style: Theme.of(context).textTheme.bodyLarge,
                           ),
                         ),
-                        const Icon(Icons.arrow_drop_down, color: AppTheme.textMuted),
+                        Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.onSurfaceVariant),
                       ],
                     ),
                   ),
@@ -297,7 +297,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Center(
               child: Text(
                 '${AppTheme.appName} ${AppTheme.appVersion}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
           ],
@@ -310,11 +310,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildBoardPicker() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       height: MediaQuery.of(context).size.height * 0.7,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         children: [
@@ -322,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Text(AppLocalizations.of(context).selectDefaultBoard, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                Text(AppLocalizations.of(context).selectDefaultBoard, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                 const Spacer(),
                 IconButton(
                   onPressed: () => setState(() => _showBoardPicker = false),
@@ -357,7 +358,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   leading: Icon(b.type.toLowerCase() == 'kanban' ? Icons.view_kanban : Icons.directions_run),
                   title: Text(b.name),
                   subtitle: b.location?.projectName != null ? Text(b.location!.projectName!) : null,
-                  trailing: selected ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                  trailing: selected ? Icon(Icons.check, color: colorScheme.primary) : null,
                   onTap: () {
                     setState(() {
                       _tempSelectedBoardId = b.id;

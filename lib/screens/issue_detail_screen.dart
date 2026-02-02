@@ -161,6 +161,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Overlay content for mention list so it can scroll and receive taps (outside SingleChildScrollView).
   Widget _buildMentionOverlayContent() {
+    final colorScheme = Theme.of(context).colorScheme;
     final offset = _mentionOverlayOffset ?? Offset.zero;
     final size = _mentionOverlaySize ?? Size(MediaQuery.of(context).size.width, 100);
     const listHeight = 200.0;
@@ -181,18 +182,18 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           child: Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(8),
-            color: Colors.white,
+            color: colorScheme.surface,
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFDFE1E6)),
+                border: Border.all(color: colorScheme.outlineVariant),
               ),
               clipBehavior: Clip.antiAlias,
               child: ListView.separated(
                 physics: const ClampingScrollPhysics(),
                 padding: EdgeInsets.zero,
                 itemCount: _mentionSuggestions.length,
-                separatorBuilder: (context, index) => const Divider(height: 1, thickness: 1),
+                separatorBuilder: (context, index) => Divider(height: 1, thickness: 1, color: colorScheme.outlineVariant),
                 itemBuilder: (context, index) {
                   final user = _mentionSuggestions[index];
                   return InkWell(
@@ -208,11 +209,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                                 user.avatarUrls!['48x48']!,
                                 width: 36,
                                 height: 36,
-                                errorBuilder: (context, error, stackTrace) => _mentionAvatarPlaceholder(user),
+                                errorBuilder: (context, error, stackTrace) => _mentionAvatarPlaceholder(context, user),
                               ),
                             )
                           else
-                            _mentionAvatarPlaceholder(user),
+                            _mentionAvatarPlaceholder(context, user),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -220,16 +221,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                               children: [
                                 Text(
                                   user.displayName,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w500,
-                                    color: Color(0xFF172B4D),
+                                    color: colorScheme.onSurface,
                                   ),
                                 ),
                                 if (user.emailAddress != null && user.emailAddress!.isNotEmpty)
                                   Text(
                                     user.emailAddress!,
-                                    style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A)),
+                                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                                   ),
                               ],
                             ),
@@ -247,19 +248,20 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     );
   }
 
-  Widget _mentionAvatarPlaceholder(JiraUser user) {
+  Widget _mentionAvatarPlaceholder(BuildContext context, JiraUser user) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: 36,
       height: 36,
       decoration: BoxDecoration(
-        color: const Color(0xFF0052CC),
+        color: colorScheme.primary,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Center(
         child: Text(
           user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: colorScheme.onPrimary,
             fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
@@ -455,6 +457,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -465,35 +468,72 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           icon: const Icon(Icons.arrow_back),
         ),
         title: Text(widget.issueKey, style: const TextStyle(fontWeight: FontWeight.w700)),
-        backgroundColor: const Color(0xFF0052CC),
-        foregroundColor: Colors.white,
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+        actions: [
+          PopupMenuButton<String>(
+            icon: Icon(Icons.share, color: colorScheme.onPrimary),
+            onSelected: (value) {
+              if (value == 'copy') _copyIssueLink();
+              else if (value == 'open') _openIssueInBrowser();
+            },
+            itemBuilder: (context) {
+              final cs = Theme.of(context).colorScheme;
+              return [
+                PopupMenuItem(
+                  value: 'copy',
+                  child: Row(
+                    children: [
+                      Icon(Icons.link, size: 20, color: cs.onSurface),
+                      const SizedBox(width: 8),
+                      Text(AppLocalizations.of(context).copyIssueLink),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'open',
+                  child: Row(
+                    children: [
+                      Icon(Icons.open_in_browser, size: 20, color: cs.onSurface),
+                      const SizedBox(width: 8),
+                      Text(AppLocalizations.of(context).openInBrowser),
+                    ],
+                  ),
+                ),
+              ];
+            },
+          ),
+        ],
       ),
-      body: Stack(
-        children: [
-          _loading
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF0052CC)))
-              : _error != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.error_outline, size: 48, color: Color(0xFFDE350B)),
-                            const SizedBox(height: 16),
-                            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF5E6C84))),
-                            const SizedBox(height: 24),
-                            FilledButton(
-                              onPressed: _load,
-                              child: Text(AppLocalizations.of(context).retry),
+      body: Builder(
+        builder: (context) {
+          final colorScheme = Theme.of(context).colorScheme;
+          return Stack(
+            children: [
+              _loading
+                  ? Center(child: CircularProgressIndicator(color: colorScheme.primary))
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+                                const SizedBox(height: 16),
+                                Text(_error!, textAlign: TextAlign.center, style: TextStyle(color: colorScheme.onSurfaceVariant)),
+                                const SizedBox(height: 24),
+                                FilledButton(
+                                  onPressed: _load,
+                                  child: Text(AppLocalizations.of(context).retry),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : _issue == null
-                      ? Center(child: Text(AppLocalizations.of(context).issueNotFound))
-                      : SingleChildScrollView(
+                          ),
+                        )
+                      : _issue == null
+                          ? Center(child: Text(AppLocalizations.of(context).issueNotFound, style: TextStyle(color: colorScheme.onSurface)))
+                          : SingleChildScrollView(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -504,38 +544,38 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           _buildDescriptionCard(),
                           if ((_issue!.fields.attachment ?? []).isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).attachments, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).attachments, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                             const SizedBox(height: 8),
                             _buildAttachmentsSection(),
                           ],
                           if (_issue!.fields.parent != null) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).parent, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).parent, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                             const SizedBox(height: 8),
                             _buildParentCard(),
                           ],
                           const SizedBox(height: 24),
-                          Text(AppLocalizations.of(context).subtasks, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).subtasks, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                           const SizedBox(height: 8),
                           _buildSubtasksSection(),
                           if (_issue!.fields.issuetype.name.toLowerCase().contains('epic')) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).issuesInThisEpic, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).issuesInThisEpic, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                             const SizedBox(height: 8),
                             _buildEpicChildrenSection(),
                           ],
                           if ((_issue!.fields.issuelinks ?? []).isNotEmpty) ...[
                             const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).linkedWorkItems, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                            Text(AppLocalizations.of(context).linkedWorkItems, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                             const SizedBox(height: 8),
                             _buildLinkedWorkItemsSection(),
                           ],
                           const SizedBox(height: 24),
-                          Text(AppLocalizations.of(context).confluence, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).confluence, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                           const SizedBox(height: 8),
                           _buildConfluenceSection(),
                           const SizedBox(height: 24),
-                          Text(AppLocalizations.of(context).comments, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text(AppLocalizations.of(context).comments, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                           const SizedBox(height: 12),
                           if (_replyToCommentId != null) _buildReplyBanner(),
                           Stack(
@@ -604,7 +644,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           if (_showDueDatePicker) _buildDueDateModal(),
           if (_showSprintPicker) _buildSprintPickerModal(),
         ],
-      ),
+      );
+    },
+  ),
     );
   }
 
@@ -858,37 +900,39 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   }
 
   Widget _userTile(JiraUser user, {double radius = 14}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         CircleAvatar(
           radius: radius,
-          backgroundColor: const Color(0xFF0052CC),
+          backgroundColor: colorScheme.primary,
           backgroundImage: user.avatar48 != null ? NetworkImage(user.avatar48!) : null,
           child: user.avatar48 == null
               ? Text(
                   user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
-                  style: TextStyle(color: Colors.white, fontSize: radius > 14 ? 16 : 12, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: colorScheme.onPrimary, fontSize: radius > 14 ? 16 : 12, fontWeight: FontWeight.w600),
                 )
               : null,
         ),
         const SizedBox(width: 8),
-        Flexible(child: Text(user.displayName, style: const TextStyle(fontSize: 14), overflow: TextOverflow.ellipsis)),
+        Flexible(child: Text(user.displayName, style: TextStyle(fontSize: 14, color: colorScheme.onSurface), overflow: TextOverflow.ellipsis)),
       ],
     );
   }
 
   /// IssueSummaryCard-style: key+status row, divider, Summary header + priority emoji + Edit, summary text.
   Widget _buildSummaryCard() {
+    final colorScheme = Theme.of(context).colorScheme;
     final statusColor = _statusColor(_issue!.fields.status.statusCategory.key);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E4E8)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [BoxShadow(color: colorScheme.shadow.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -899,9 +943,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(AppLocalizations.of(context).issueKey, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84), letterSpacing: 0.5)),
+                  Text(AppLocalizations.of(context).issueKey, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant, letterSpacing: 0.5)),
                   const SizedBox(height: 4),
-                  Text(_issue!.key, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF0052CC), letterSpacing: 0.3)),
+                  Text(_issue!.key, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: colorScheme.primary, letterSpacing: 0.3)),
                 ],
               ),
               if (_canEdit)
@@ -913,7 +957,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     decoration: BoxDecoration(
                       color: statusColor,
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 2, offset: const Offset(0, 1))],
+                      boxShadow: [BoxShadow(color: statusColor.withValues(alpha: 0.3), blurRadius: 2, offset: const Offset(0, 1))],
                     ),
                     child: Text(_issue!.fields.status.name.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: 0.5)),
                   ),
@@ -923,7 +967,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             ],
           ),
           const SizedBox(height: 18),
-          Container(height: 1, color: const Color(0xFFE1E4E8)),
+          Container(height: 1, color: colorScheme.outlineVariant),
           const SizedBox(height: 18),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -932,7 +976,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 children: [
                   const Text('📝', style: TextStyle(fontSize: 18)),
                   const SizedBox(width: 8),
-                  Text(AppLocalizations.of(context).summary, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+                  Text(AppLocalizations.of(context).summary, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: colorScheme.onSurface, letterSpacing: 0.2)),
                   if (_issue!.fields.priority != null) ...[
                     const SizedBox(width: 8),
                     Text(_getPriorityEmoji(_issue!.fields.priority!.name), style: const TextStyle(fontSize: 16)),
@@ -942,14 +986,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               if (_canEdit)
                 TextButton(
                   onPressed: () => _openSummaryEdit(),
-                  child: Text(AppLocalizations.of(context).edit, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0052CC))),
+                  child: Text(AppLocalizations.of(context).edit, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.primary)),
                 ),
             ],
           ),
           const SizedBox(height: 14),
           Text(
             _issue!.fields.summary,
-            style: const TextStyle(fontSize: 20, color: Color(0xFF172B4D), fontWeight: FontWeight.w600, height: 1.5, letterSpacing: 0.1),
+            style: TextStyle(fontSize: 20, color: colorScheme.onSurface, fontWeight: FontWeight.w600, height: 1.5, letterSpacing: 0.1),
           ),
         ],
       ),
@@ -958,15 +1002,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// IssueDetailsFields-style: card with icon+label rows (Assignee, Reporter, Priority, Type, Sprint, Story Points, Due Date).
   Widget _buildDetailsCard() {
+    final colorScheme = Theme.of(context).colorScheme;
     final sprintDisplay = _formatSprint(context, _issue!.fields.sprint);
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E4E8)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [BoxShadow(color: colorScheme.shadow.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -975,14 +1020,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             children: [
               const Text('📋', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
-              Text(AppLocalizations.of(context).details, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+              Text(AppLocalizations.of(context).details, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: colorScheme.onSurface, letterSpacing: 0.2)),
             ],
           ),
           const SizedBox(height: 16),
           _detailRowTap(
             icon: '👤',
             label: AppLocalizations.of(context).assignee,
-            value: _issue!.fields.assignee != null ? _userTile(_issue!.fields.assignee!, radius: 12) : Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: 15, color: Color(0xFF8993A4), fontStyle: FontStyle.italic)),
+            value: _issue!.fields.assignee != null ? _userTile(_issue!.fields.assignee!, radius: 12) : Text(AppLocalizations.of(context).unassigned, style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic)),
             onTap: _canEdit ? _openAssigneePicker : null,
           ),
           if (_issue!.fields.reporter != null)
@@ -999,22 +1044,22 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               children: [
                 Text(_getPriorityEmoji(_issue!.fields.priority?.name), style: const TextStyle(fontSize: 16)),
                 const SizedBox(width: 6),
-                Text(_issue!.fields.priority?.name ?? AppLocalizations.of(context).none, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
+                Text(_issue!.fields.priority?.name ?? AppLocalizations.of(context).none, style: TextStyle(fontSize: 15, color: colorScheme.onSurface, fontWeight: FontWeight.w500)),
               ],
             ),
             onTap: _canEdit ? _openPriorityPicker : null,
           ),
-          _detailRowStatic(icon: '🏷️', label: AppLocalizations.of(context).type, value: Text(_issue!.fields.issuetype.name, style: const TextStyle(fontSize: 14, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500))),
+          _detailRowStatic(icon: '🏷️', label: AppLocalizations.of(context).type, value: Text(_issue!.fields.issuetype.name, style: TextStyle(fontSize: 14, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500))),
           _detailRowTap(
             icon: '🏃',
             label: AppLocalizations.of(context).sprint,
-            value: Text(sprintDisplay, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+            value: Text(sprintDisplay, style: TextStyle(fontSize: 15, color: colorScheme.onSurface, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
             onTap: _canEdit ? _openSprintPicker : null,
           ),
           _detailRowTap(
             icon: '🎯',
             label: AppLocalizations.of(context).storyPoints,
-            value: Text(_issue!.fields.customfield_10016?.toString() ?? AppLocalizations.of(context).notSet, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500)),
+            value: Text(_issue!.fields.customfield_10016?.toString() ?? AppLocalizations.of(context).notSet, style: TextStyle(fontSize: 15, color: colorScheme.onSurface, fontWeight: FontWeight.w500)),
             onTap: _canEdit ? _openStoryPointsPicker : null,
           ),
           _detailRowTap(
@@ -1022,7 +1067,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             label: AppLocalizations.of(context).dueDate,
             value: Text(
               _issue!.fields.duedate != null ? _formatDueDate(_issue!.fields.duedate!) : AppLocalizations.of(context).notSet,
-              style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), fontWeight: FontWeight.w500),
+              style: TextStyle(fontSize: 15, color: colorScheme.onSurface, fontWeight: FontWeight.w500),
             ),
             onTap: _canEdit ? _openDueDatePicker : null,
           ),
@@ -1033,15 +1078,15 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Description card with Edit (plain/ADF display, edit as plain text → ADF).
   Widget _buildDescriptionCard() {
-    final plain = _plainText(_issue!.fields.description).trim();
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE1E4E8)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [BoxShadow(color: colorScheme.shadow.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1049,13 +1094,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(AppLocalizations.of(context).description, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Color(0xFF172B4D), letterSpacing: 0.2)),
+              Text(AppLocalizations.of(context).description, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: colorScheme.onSurface, letterSpacing: 0.2)),
               if (_canEdit)
                 TextButton(
                   onPressed: _updatingDescription ? null : _openDescriptionEdit,
                   child: _updatingDescription
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))
-                      : const Text('Edit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0052CC))),
+                      ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))
+                      : Text('Edit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.primary)),
                 ),
             ],
           ),
@@ -1188,6 +1233,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   }
 
   Widget _detailRowTap({required String icon, required String label, required Widget value, VoidCallback? onTap}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: InkWell(
@@ -1205,7 +1251,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84)),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -1216,14 +1262,14 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0x050052CC),
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Flexible(child: value),
-                    if (onTap != null) const Text(' ›', style: TextStyle(fontSize: 20, color: Color(0xFF8993A4), fontWeight: FontWeight.w300)),
+                    if (onTap != null) Text(' ›', style: TextStyle(fontSize: 20, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w300)),
                   ],
                 ),
               ),
@@ -1235,6 +1281,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   }
 
   Widget _detailRowStatic({required String icon, required String label, required Widget value}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -1249,7 +1296,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 Expanded(
                   child: Text(
                     label,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF5E6C84)),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1260,7 +1307,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
               decoration: BoxDecoration(
-                color: const Color(0x050052CC),
+                color: colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -1451,10 +1498,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             ),
           ),
           if (_loadingUsers)
-            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+            Padding(padding: const EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)))
           else ...[
             ListTile(
-              title: Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontStyle: FontStyle.italic)),
+              title: Text(AppLocalizations.of(context).unassigned, style: TextStyle(fontStyle: FontStyle.italic, color: Theme.of(context).colorScheme.onSurface)),
               onTap: () async {
                 setState(() => _updatingAssignee = 'unassign');
                 final err = await context.read<JiraApiService>().updateIssueField(widget.issueKey, {'assignee': null});
@@ -1471,11 +1518,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               trailing: _updatingAssignee == 'unassign' ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
             ),
             ..._assignableUsers.map((u) {
+              final colorScheme = Theme.of(context).colorScheme;
               final isCurrent = _issue!.fields.assignee?.accountId == u.accountId;
               return ListTile(
-                leading: CircleAvatar(radius: 16, backgroundImage: u.avatar48 != null ? NetworkImage(u.avatar48!) : null, child: u.avatar48 == null ? Text(u.displayName.isNotEmpty ? u.displayName[0] : '?') : null),
-                title: Text(u.displayName),
-                subtitle: u.emailAddress != null ? Text(u.emailAddress!, style: const TextStyle(fontSize: 12)) : null,
+                leading: CircleAvatar(radius: 16, backgroundColor: colorScheme.primary, backgroundImage: u.avatar48 != null ? NetworkImage(u.avatar48!) : null, child: u.avatar48 == null ? Text(u.displayName.isNotEmpty ? u.displayName[0] : '?', style: TextStyle(color: colorScheme.onPrimary)) : null),
+                title: Text(u.displayName, style: TextStyle(color: colorScheme.onSurface)),
+                subtitle: u.emailAddress != null ? Text(u.emailAddress!, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)) : null,
                 selected: isCurrent,
                 onTap: isCurrent ? null : () async {
                   setState(() => _updatingAssignee = u.accountId);
@@ -1504,13 +1552,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: AppLocalizations.of(context).sprint,
       onClose: () => setState(() => _showSprintPicker = false),
       child: _loadingSprints
-          ? const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          ? Padding(padding: const EdgeInsets.all(24), child: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)))
           : ListView(
               shrinkWrap: true,
               children: [
                 ListTile(
                   leading: const Text('📋', style: TextStyle(fontSize: 20)),
-                  title: Text(AppLocalizations.of(context).backlog),
+                  title: Text(AppLocalizations.of(context).backlog, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
                   trailing: _updatingSprintToBacklog ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                   onTap: _boardIdForSprint == null
                       ? null
@@ -1534,8 +1582,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   final isCurrent = currentSprintId != null && currentSprintId == s.id;
                   return ListTile(
                     leading: Text(s.state == 'active' ? '🏃' : '📅', style: const TextStyle(fontSize: 20)),
-                    title: Text(s.name),
-                    subtitle: Text(s.state.toUpperCase(), style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84))),
+                    title: Text(s.name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                    subtitle: Text(s.state.toUpperCase(), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     selected: isCurrent,
                     trailing: _updatingSprintId == s.id ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
                     onTap: isCurrent
@@ -1565,9 +1613,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: 'Status',
       onClose: () => setState(() => _showStatusPicker = false),
       child: _loadingTransitions
-          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)))
           : _transitions.isEmpty
-              ? const Padding(padding: EdgeInsets.all(24), child: Text('No transitions available', style: TextStyle(color: Color(0xFF5E6C84))))
+              ? Padding(padding: const EdgeInsets.all(24), child: Text('No transitions available', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
               : ListView(
                   shrinkWrap: true,
                   children: _transitions.map((t) {
@@ -1577,8 +1625,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     final toName = to is Map ? (to['name']?.toString() ?? '') : '';
                     final isTransitioning = _transitioningStatusId == id;
                     return ListTile(
-                      title: Text(name),
-                      subtitle: toName.isNotEmpty ? Text('→ $toName') : null,
+                      title: Text(name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                      subtitle: toName.isNotEmpty ? Text('→ $toName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)) : null,
                       onTap: () async {
                         setState(() => _transitioningStatusId = id);
                         final err = await context.read<JiraApiService>().transitionIssue(widget.issueKey, id);
@@ -1604,7 +1652,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
       title: 'Priority',
       onClose: () => setState(() => _showPriorityPicker = false),
       child: _loadingPriorities
-          ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: Color(0xFF0052CC))))
+          ? Center(child: Padding(padding: const EdgeInsets.all(24), child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)))
           : ListView(
               shrinkWrap: true,
               children: _priorities.map((p) {
@@ -1613,7 +1661,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 final isUpdating = _updatingPriorityId == id;
                 return ListTile(
                   leading: Text(_getPriorityEmoji(name), style: const TextStyle(fontSize: 20)),
-                  title: Text(name),
+                  title: Text(name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
                   onTap: () async {
                     setState(() => _updatingPriorityId = id);
                     final err = await context.read<JiraApiService>().updateIssueField(widget.issueKey, {'priority': {'id': id.toString()}});
@@ -1745,6 +1793,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   }
 
   Widget _modalSheet({required String title, required VoidCallback onClose, required Widget child}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onClose,
       behavior: HitTestBehavior.opaque,
@@ -1756,9 +1805,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           child: Container(
             width: double.infinity,
             constraints: const BoxConstraints(maxHeight: 400),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            decoration: BoxDecoration(
+              color: colorScheme.surface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1768,7 +1817,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                       IconButton(icon: const Icon(Icons.close), onPressed: onClose),
                     ],
                   ),
@@ -1930,10 +1979,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Parent card: same as reference IssueParentCard — tap to open parent issue.
   Widget _buildParentCard() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_loadingParent) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))),
       );
     }
     final parent = _parentIssue ?? _issue?.fields.parent;
@@ -1941,7 +1991,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final key = parent is JiraIssue ? parent.key : (parent as JiraIssueParent).key;
     final summary = parent is JiraIssue ? parent.fields.summary : (parent as JiraIssueParent).summary ?? '';
     return Material(
-      color: Colors.white,
+      color: colorScheme.surface,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: () => _navigateToIssue(key),
@@ -1950,23 +2000,23 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFDFE1E6)),
+            border: Border.all(color: colorScheme.outlineVariant),
           ),
           child: Row(
             children: [
-              Icon(Icons.account_tree, color: Colors.grey.shade600, size: 22),
+              Icon(Icons.account_tree, color: colorScheme.onSurfaceVariant, size: 22),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(key, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF0052CC), fontSize: 14)),
+                    Text(key, style: TextStyle(fontWeight: FontWeight.w700, color: colorScheme.primary, fontSize: 14)),
                     if (summary.isNotEmpty)
-                      Text(summary, style: const TextStyle(fontSize: 13, color: Color(0xFF5E6C84)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      Text(summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Color(0xFF5E6C84)),
+              Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -1976,16 +2026,17 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Subtasks section: same as reference IssueSubtasksCard — list of subtasks, tap to open.
   Widget _buildSubtasksSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_loadingSubtasks) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))),
       );
     }
     if (_subtasks.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 4),
-        child: Text('No subtasks.', style: TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text('No subtasks.', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
       );
     }
     return Column(
@@ -1994,7 +2045,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: () => _navigateToIssue(issue.key),
@@ -2003,7 +2054,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: colorScheme.outlineVariant),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2024,13 +2075,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                          child: Text(issue.key, style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.primary, fontSize: 13), overflow: TextOverflow.ellipsis),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                        Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(issue.fields.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
                     if (issue.fields.assignee != null) ...[
                       const SizedBox(height: 8),
                       _userTile(issue.fields.assignee!, radius: 10),
@@ -2047,16 +2098,17 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Epic children section: list issues in this Epic (when issue type is Epic). JQL parentEpic = key.
   Widget _buildEpicChildrenSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_loadingEpicChildren) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))),
       );
     }
     if (_epicChildren.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Text(AppLocalizations.of(context).noIssuesInThisEpic, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+        child: Text(AppLocalizations.of(context).noIssuesInThisEpic, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
       );
     }
     return Column(
@@ -2065,7 +2117,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: () => _navigateToIssue(issue.key),
@@ -2074,7 +2126,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: colorScheme.outlineVariant),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2095,13 +2147,13 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                          child: Text(issue.key, style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.primary, fontSize: 13), overflow: TextOverflow.ellipsis),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                        Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(issue.fields.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
                     if (issue.fields.assignee != null) ...[
                       const SizedBox(height: 8),
                       _userTile(issue.fields.assignee!, radius: 10),
@@ -2118,11 +2170,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Linked work items section: list issue links from _issue.fields.issuelinks (Jira API).
   Widget _buildLinkedWorkItemsSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     final links = _issue?.fields.issuelinks ?? [];
     if (links.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 4),
-        child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+        child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
       );
     }
     return Column(
@@ -2132,7 +2185,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Material(
-            color: Colors.white,
+            color: colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: () => _navigateToIssue(issue.key),
@@ -2141,7 +2194,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFDFE1E6)),
+                  border: Border.all(color: colorScheme.outlineVariant),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2152,23 +2205,23 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFEBECF0),
+                            color: colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             link.directionLabel,
-                            style: const TextStyle(fontSize: 11, color: Color(0xFF5E6C84), fontWeight: FontWeight.w500),
+                            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
                           ),
                         ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF0052CC), fontSize: 13), overflow: TextOverflow.ellipsis),
+                          child: Text(issue.key, style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.primary, fontSize: 13), overflow: TextOverflow.ellipsis),
                         ),
-                        const Icon(Icons.chevron_right, color: Color(0xFF5E6C84), size: 20),
+                        Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant, size: 20),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: const TextStyle(fontSize: 13, color: Color(0xFF172B4D)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(issue.fields.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -2201,10 +2254,11 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
 
   /// Confluence section: list remote links that are Confluence pages (Jira API) and allow adding/linking.
   Widget _buildConfluenceSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     if (_loadingConfluenceLinks) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))),
       );
     }
     return Column(
@@ -2213,7 +2267,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         if (_confluenceLinks.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
-            child: Text(AppLocalizations.of(context).noConfluencePagesLinked, style: const TextStyle(color: Color(0xFF5E6C84), fontSize: 14)),
+            child: Text(AppLocalizations.of(context).noConfluencePagesLinked, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
           )
         else
           ..._confluenceLinks.map((link) {
@@ -2221,7 +2275,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Material(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
                 child: InkWell(
                   onTap: link.url.isNotEmpty && !isDeleting
@@ -2232,7 +2286,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFDFE1E6)),
+                      border: Border.all(color: colorScheme.outlineVariant),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2241,16 +2295,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.article_outlined, color: Color(0xFF0052CC), size: 22),
+                            Icon(Icons.article_outlined, color: colorScheme.primary, size: 22),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Text(link.title.isNotEmpty ? link.title : 'Confluence Page', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF172B4D), fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  Text(link.title.isNotEmpty ? link.title : 'Confluence Page', style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface, fontSize: 13), maxLines: 2, overflow: TextOverflow.ellipsis),
                                   if (link.url.isNotEmpty) ...[
                                     const SizedBox(height: 4),
-                                    Text(link.url, style: const TextStyle(fontSize: 12, color: Color(0xFF5E6C84)), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                    Text(link.url, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
                                   ],
                                 ],
                               ),
@@ -2265,17 +2319,17 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                           children: [
                             if (!isDeleting && link.url.isNotEmpty)
                               TextButton.icon(
-                                icon: const Icon(Icons.open_in_new, size: 18, color: Color(0xFF0052CC)),
-                                label: Text(AppLocalizations.of(context).openExternally, style: const TextStyle(fontSize: 13)),
+                                icon: Icon(Icons.open_in_new, size: 18, color: colorScheme.primary),
+                                label: Text(AppLocalizations.of(context).openExternally, style: TextStyle(fontSize: 13, color: colorScheme.primary)),
                                 onPressed: () => url_launcher.launchUrl(Uri.parse(link.url), mode: url_launcher.LaunchMode.externalApplication),
                               ),
                             TextButton.icon(
                               icon: isDeleting
-                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0052CC)))
-                                  : const Icon(Icons.link_off, size: 18, color: Color(0xFF5E6C84)),
+                                  ? SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))
+                                  : Icon(Icons.link_off, size: 18, color: colorScheme.onSurfaceVariant),
                               label: Text(
                                 AppLocalizations.of(context).removeConfluenceLink,
-                                style: const TextStyle(fontSize: 13, color: Color(0xFF5E6C84)),
+                                style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
                               ),
                               onPressed: isDeleting ? null : () => _confirmRemoveConfluenceLink(link.id),
                             ),
@@ -2293,7 +2347,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
           width: double.infinity,
           child: OutlinedButton.icon(
             onPressed: () => _showAddConfluenceDialog(context),
-            icon: const Icon(Icons.add_link, size: 18),
+            icon: Icon(Icons.add_link, size: 18, color: colorScheme.primary),
             label: Text(AppLocalizations.of(context).linkConfluencePage),
           ),
         ),
@@ -2308,14 +2362,16 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final added = await showDialog<bool>(
       context: context,
       builder: (ctx) {
+        final colorScheme = Theme.of(ctx).colorScheme;
         return Dialog(
+          backgroundColor: colorScheme.surface,
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(AppLocalizations.of(ctx).linkConfluencePage, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                Text(AppLocalizations.of(ctx).linkConfluencePage, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
                 const SizedBox(height: 16),
                 TextField(
                   controller: urlController,
@@ -2608,9 +2664,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     final commentId = map['id']?.toString();
     final isOwnComment = _currentUser != null && author != null && _currentUser!.accountId == author.accountId;
     final attachments = _issue?.fields.attachment ?? [];
+    final colorScheme = Theme.of(context).colorScheme;
     final card = Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: const Color(0xFFF4F5F7),
+      color: colorScheme.surfaceContainerHighest,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2620,12 +2677,12 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFF0052CC),
+                  backgroundColor: colorScheme.primary,
                   backgroundImage: author?.avatar48 != null ? NetworkImage(author!.avatar48!) : null,
                   child: author?.avatar48 == null
                       ? Text(
                           authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: colorScheme.onPrimary, fontSize: 14, fontWeight: FontWeight.bold),
                         )
                       : null,
                 ),
@@ -2634,8 +2691,8 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(authorName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF172B4D))),
-                      Text(_formatRelativeDate(created), style: const TextStyle(fontSize: 12, color: Color(0xFF7A869A))),
+                      Text(authorName, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
+                      Text(_formatRelativeDate(created), style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
                     ],
                   ),
                 ),
@@ -2661,7 +2718,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     icon: const Icon(Icons.reply, size: 18),
                     label: const Text('Reply'),
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF42526E),
+                      foregroundColor: colorScheme.onSurfaceVariant,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
@@ -2670,7 +2727,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     icon: const Icon(Icons.ios_share, size: 18),
                     label: const Text('Share'),
                     style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF42526E),
+                      foregroundColor: colorScheme.onSurfaceVariant,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     ),
                   ),
@@ -2680,7 +2737,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       icon: const Icon(Icons.edit, size: 18),
                       label: const Text('Edit'),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF42526E),
+                        foregroundColor: colorScheme.onSurfaceVariant,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
@@ -2689,7 +2746,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                       icon: const Icon(Icons.delete_outline, size: 18),
                       label: const Text('Delete'),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFFFF5630),
+                        foregroundColor: colorScheme.error,
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       ),
                     ),
@@ -2715,6 +2772,38 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     Clipboard.setData(ClipboardData(text: url));
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comment link copied to clipboard')));
+    }
+  }
+
+  String? _getIssueUrl() {
+    final base = context.read<JiraApiService>().jiraBaseUrl;
+    if (base == null) return null;
+    return '$base/browse/${widget.issueKey}';
+  }
+
+  void _copyIssueLink() {
+    final url = _getIssueUrl();
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot build link')));
+      return;
+    }
+    Clipboard.setData(ClipboardData(text: url));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).linkCopiedToClipboard)));
+    }
+  }
+
+  Future<void> _openIssueInBrowser() async {
+    final url = _getIssueUrl();
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot build link')));
+      return;
+    }
+    final uri = Uri.parse(url);
+    if (await url_launcher.canLaunchUrl(uri)) {
+      await url_launcher.launchUrl(uri, mode: url_launcher.LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot open link')));
     }
   }
 
@@ -2944,13 +3033,14 @@ class _CommentBodyWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (body is String) {
-      return _LinkableText(body as String, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+      return _LinkableText(body as String, style: TextStyle(fontSize: 14, height: 1.5, color: colorScheme.onSurface));
     }
     if (body is Map) {
       final content = body['content'];
       if (content is! List || content.isEmpty) {
-        return _LinkableText(_plainText(body), style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E)));
+        return _LinkableText(_plainText(body), style: TextStyle(fontSize: 14, height: 1.5, color: colorScheme.onSurface));
       }
       final children = <Widget>[];
       for (final node in content) {
@@ -2982,20 +3072,20 @@ class _CommentBodyWidget extends StatelessWidget {
                         borderRadius: BorderRadius.circular(2),
                         child: Text(
                           text.isEmpty ? href : text,
-                          style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF0052CC), decoration: TextDecoration.underline),
+                          style: TextStyle(fontSize: 14, height: 1.5, color: colorScheme.primary, decoration: TextDecoration.underline),
                         ),
                       ),
                     ));
                     continue;
                   }
                 }
-                TextStyle textStyle = const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E));
+                TextStyle textStyle = TextStyle(fontSize: 14, height: 1.5, color: colorScheme.onSurface);
                 if (marks != null) {
                   for (final m in marks) {
                     if (m is Map) {
                       if (m['type'] == 'strong') textStyle = textStyle.copyWith(fontWeight: FontWeight.bold);
                       else if (m['type'] == 'em') textStyle = textStyle.copyWith(fontStyle: FontStyle.italic);
-                      else if (m['type'] == 'code') textStyle = textStyle.copyWith(fontFamily: 'monospace', backgroundColor: const Color(0xFFF4F5F7));
+                      else if (m['type'] == 'code') textStyle = textStyle.copyWith(fontFamily: 'monospace', backgroundColor: colorScheme.surfaceContainerHighest);
                     }
                   }
                 }
@@ -3015,13 +3105,13 @@ class _CommentBodyWidget extends StatelessWidget {
                 final chip = Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE6FCFF),
+                    color: colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFFB3D4FF), width: 1),
+                    border: Border.all(color: colorScheme.primary.withValues(alpha: 0.5), width: 1),
                   ),
                   child: Text(
                     displayName,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500),
+                    style: TextStyle(fontSize: 13, color: colorScheme.primary, fontWeight: FontWeight.w500),
                   ),
                 );
                 row.add(Padding(
@@ -3047,7 +3137,7 @@ class _CommentBodyWidget extends StatelessWidget {
                         }
                       },
                       borderRadius: BorderRadius.circular(2),
-                      child: Text(url, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF0052CC), decoration: TextDecoration.underline)),
+                      child: Text(url, style: TextStyle(fontSize: 14, height: 1.5, color: colorScheme.primary, decoration: TextDecoration.underline)),
                     ),
                   ));
                 }
@@ -3108,7 +3198,7 @@ class _CommentBodyWidget extends StatelessWidget {
             if (text.isNotEmpty) {
               children.add(Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: _LinkableText(text, style: const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E))),
+                child: _LinkableText(text, style: TextStyle(fontSize: 14, height: 1.5, color: colorScheme.onSurface)),
               ));
             }
           }
@@ -3524,8 +3614,9 @@ class _DescriptionBodyWidget extends StatelessWidget {
     return '@user';
   }
 
-  Widget _renderInlineContent(List<dynamic> content, [TextStyle? baseStyle]) {
-    final style = baseStyle ?? const TextStyle(fontSize: 14, height: 1.5, color: Color(0xFF42526E));
+  Widget _renderInlineContent(BuildContext context, List<dynamic> content, [TextStyle? baseStyle]) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final style = baseStyle ?? TextStyle(fontSize: 14, height: 1.5, color: colorScheme.onSurface);
     final row = <Widget>[];
     for (var i = 0; i < content.length; i++) {
       final item = content[i];
@@ -3548,7 +3639,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
                   }
                 },
                 borderRadius: BorderRadius.circular(2),
-                child: Text(text.isEmpty ? href : text, style: style.copyWith(color: const Color(0xFF0052CC), decoration: TextDecoration.underline)),
+                child: Text(text.isEmpty ? href : text, style: style.copyWith(color: colorScheme.primary, decoration: TextDecoration.underline)),
               ),
             ));
             continue;
@@ -3560,7 +3651,7 @@ class _DescriptionBodyWidget extends StatelessWidget {
             if (m is Map) {
               if (m['type'] == 'strong') s = s.copyWith(fontWeight: FontWeight.bold);
               else if (m['type'] == 'em') s = s.copyWith(fontStyle: FontStyle.italic);
-              else if (m['type'] == 'code') s = s.copyWith(fontFamily: 'monospace', backgroundColor: const Color(0xFFF4F5F7));
+              else if (m['type'] == 'code') s = s.copyWith(fontFamily: 'monospace', backgroundColor: colorScheme.surfaceContainerHighest);
             }
           }
         }
@@ -3573,11 +3664,11 @@ class _DescriptionBodyWidget extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: const Color(0xFFE6FCFF),
+              color: colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: const Color(0xFFB3D4FF), width: 1),
+              border: Border.all(color: colorScheme.primary.withValues(alpha: 0.5), width: 1),
             ),
-            child: Text(name, style: const TextStyle(fontSize: 13, color: Color(0xFF0052CC), fontWeight: FontWeight.w500)),
+            child: Text(name, style: TextStyle(fontSize: 13, color: colorScheme.primary, fontWeight: FontWeight.w500)),
           ),
         ));
       } else if (itemType == 'inlineCard') {
@@ -3593,19 +3684,20 @@ class _DescriptionBodyWidget extends StatelessWidget {
                 }
               },
               borderRadius: BorderRadius.circular(2),
-              child: Text(url, style: style.copyWith(color: const Color(0xFF0052CC), decoration: TextDecoration.underline)),
+              child: Text(url, style: style.copyWith(color: colorScheme.primary, decoration: TextDecoration.underline)),
             ),
           ));
         }
       } else if (itemType == 'hardBreak') {
-        row.add(const Text('\n', style: TextStyle(fontSize: 14, height: 1.5)));
+        row.add(Text('\n', style: TextStyle(fontSize: 14, height: 1.5, color: colorScheme.onSurface)));
       }
     }
     if (row.isEmpty) return const SizedBox.shrink();
     return Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 0, runSpacing: 4, children: row);
   }
 
-  Widget _renderList(dynamic listNode, int listIndex) {
+  Widget _renderList(BuildContext context, dynamic listNode, int listIndex) {
+    final colorScheme = Theme.of(context).colorScheme;
     final content = listNode is Map ? listNode['content'] as List? : null;
     if (content == null) return const SizedBox.shrink();
     final isOrdered = listNode is Map && listNode['type'] == 'orderedList';
@@ -3624,13 +3716,13 @@ class _DescriptionBodyWidget extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(width: 24, child: Text(bullet, style: const TextStyle(fontSize: 14, color: Color(0xFF42526E)))),
-                  Expanded(child: _renderInlineContent(node['content'] as List)),
+                  SizedBox(width: 24, child: Text(bullet, style: TextStyle(fontSize: 14, color: colorScheme.onSurface))),
+                  Expanded(child: _renderInlineContent(context, node['content'] as List)),
                 ],
               ),
             ));
           } else if (node is Map && (node['type'] == 'bulletList' || node['type'] == 'orderedList')) {
-            items.add(Padding(padding: const EdgeInsets.only(left: 20), child: _renderList(node, i)));
+            items.add(Padding(padding: const EdgeInsets.only(left: 20), child: _renderList(context, node, i)));
           }
         }
       }
@@ -3640,20 +3732,21 @@ class _DescriptionBodyWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     if (description == null) {
-      return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
+      return Text('No description', style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant, height: 1.5));
     }
     if (description is String) {
       final s = (description as String).trim();
-      if (s.isEmpty) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
-      return _LinkableText(s, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5));
+      if (s.isEmpty) return Text('No description', style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant, height: 1.5));
+      return _LinkableText(s, style: TextStyle(fontSize: 15, color: colorScheme.onSurface, height: 1.5));
     }
-    if (description is! Map) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
+    if (description is! Map) return Text('No description', style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant, height: 1.5));
     final content = description['content'];
     if (content is! List || content.isEmpty) {
       final plain = _plainText(description);
-      if (plain.trim().isEmpty) return const Text('No description', style: TextStyle(fontSize: 15, color: Color(0xFF8993A4), height: 1.5));
-      return _LinkableText(plain, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5));
+      if (plain.trim().isEmpty) return Text('No description', style: TextStyle(fontSize: 15, color: colorScheme.onSurfaceVariant, height: 1.5));
+      return _LinkableText(plain, style: TextStyle(fontSize: 15, color: colorScheme.onSurface, height: 1.5));
     }
     final children = <Widget>[];
     for (final node in content) {
@@ -3664,20 +3757,20 @@ class _DescriptionBodyWidget extends StatelessWidget {
         if (paragraphContent is List && paragraphContent.isNotEmpty) {
           children.add(Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: _renderInlineContent(paragraphContent),
+            child: _renderInlineContent(context, paragraphContent),
           ));
         } else {
           final text = _plainText(paragraphContent is List ? {'content': paragraphContent} : node);
           if (text.isNotEmpty) {
             children.add(Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: _LinkableText(text, style: const TextStyle(fontSize: 15, color: Color(0xFF172B4D), height: 1.5)),
+              child: _LinkableText(text, style: TextStyle(fontSize: 15, color: colorScheme.onSurface, height: 1.5)),
             ));
           }
         }
       } else if (type == 'heading' && node['content'] is List) {
         final level = (node['attrs'] is Map) ? intFromJson((node['attrs'] as Map)['level']) ?? 1 : 1;
-        TextStyle headingStyle = const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF172B4D));
+        TextStyle headingStyle = TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface);
         if (level == 1) headingStyle = headingStyle.copyWith(fontSize: 24);
         else if (level == 2) headingStyle = headingStyle.copyWith(fontSize: 20);
         else if (level == 3) headingStyle = headingStyle.copyWith(fontSize: 18);
@@ -3685,21 +3778,21 @@ class _DescriptionBodyWidget extends StatelessWidget {
         else headingStyle = headingStyle.copyWith(fontSize: 14);
         children.add(Padding(
           padding: const EdgeInsets.only(top: 12, bottom: 8),
-          child: _renderInlineContent(node['content'] as List, headingStyle),
+          child: _renderInlineContent(context, node['content'] as List, headingStyle),
         ));
       } else if (type == 'bulletList' || type == 'orderedList') {
-        children.add(Padding(padding: const EdgeInsets.only(bottom: 8), child: _renderList(node, 0)));
+        children.add(Padding(padding: const EdgeInsets.only(bottom: 8), child: _renderList(context, node, 0)));
       } else if (type == 'codeBlock' && node['content'] is List) {
         final code = (node['content'] as List).map((c) => _plainText(c)).join('');
         children.add(Container(
           margin: const EdgeInsets.only(top: 4, bottom: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFF4F5F7),
+            color: colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(4),
-            border: const Border(left: BorderSide(color: Color(0xFFDFE1E6), width: 3)),
+            border: Border(left: BorderSide(color: colorScheme.outline, width: 3)),
           ),
-          child: SelectableText(code, style: const TextStyle(fontSize: 13, fontFamily: 'monospace', color: Color(0xFF172B4D))),
+          child: SelectableText(code, style: TextStyle(fontSize: 13, fontFamily: 'monospace', color: colorScheme.onSurface)),
         ));
       } else if (type == 'mediaSingle' && node['content'] is List) {
         for (final media in node['content'] as List) {

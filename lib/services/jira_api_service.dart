@@ -298,11 +298,11 @@ class JiraApiService {
     return issues;
   }
 
-  /// Fetches all board issues (paginated). Used as fallback for backlog when backlog API and JQL return empty.
+  /// Fetches all board issues (paginated). Jira Agile API may cap maxResults at 50 per page.
   Future<List<JiraIssue>> getBoardIssuesAll(int boardId, {String? assignee}) async {
     final results = <JiraIssue>[];
     int startAt = 0;
-    const maxResults = 100;
+    const maxResults = 50;
     while (true) {
       final params = <String, String>{
         'startAt': '$startAt',
@@ -451,38 +451,15 @@ class JiraApiService {
     }
   }
 
+  /// Fetches all issues in a sprint (paginated). Jira Agile API may cap maxResults at 50.
   Future<List<JiraIssue>> getSprintIssues(
     int boardId,
     int sprintId, {
     String? assignee,
   }) async {
-    final params = <String, String>{
-      'maxResults': '100',
-      'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
-    };
-    if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
-      if (assignee == 'unassigned') {
-        params['jql'] = 'assignee is EMPTY';
-      } else {
-        params['jql'] = 'assignee = "$assignee"';
-      }
-    }
-    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/sprint/$sprintId/issue')
-        .replace(queryParameters: params);
-    final r = await http.get(uri, headers: _headers).timeout(_timeout);
-    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
-
-    final json = jsonDecode(r.body) as Map<String, dynamic>;
-    final list = (json['issues'] as List<dynamic>?) ?? [];
-    return list.map((e) => JiraIssue.fromJson(e as Map<String, dynamic>)).toList();
-  }
-
-  /// Fetches all backlog issues (paginated). Board backlog = issues not in any sprint.
-  /// Jira Agile API may return 'issues' or 'values'; we accept both.
-  Future<List<JiraIssue>> getBacklogIssues(int boardId, {String? assignee}) async {
     final results = <JiraIssue>[];
     int startAt = 0;
-    const maxResults = 100;
+    const maxResults = 50;
     while (true) {
       final params = <String, String>{
         'startAt': '$startAt',
@@ -496,24 +473,18 @@ class JiraApiService {
           params['jql'] = 'assignee = "$assignee"';
         }
       }
-      final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/backlog').replace(queryParameters: params);
+      final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/sprint/$sprintId/issue')
+          .replace(queryParameters: params);
       final r = await http.get(uri, headers: _headers).timeout(_timeout);
       if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
 
       final json = jsonDecode(r.body) as Map<String, dynamic>;
-      // Jira Agile backlog: standard key is 'issues'; some responses use 'values' or nest under 'contents'
-      List<dynamic> list = (json['issues'] as List<dynamic>?) ?? (json['values'] as List<dynamic>?) ?? [];
-      if (list.isEmpty && json['contents'] is Map) {
-        final contents = json['contents'] as Map<String, dynamic>;
-        list = (contents['issues'] as List<dynamic>?) ?? (contents['values'] as List<dynamic>?) ?? [];
-      }
+      final list = (json['issues'] as List<dynamic>?) ?? [];
       for (final e in list) {
         if (e is Map<String, dynamic>) {
           try {
             results.add(JiraIssue.fromJson(e));
-          } catch (parseErr) {
-            if (debugLog) debugPrint('[JiraAPI] getBacklogIssues skip issue parse: $parseErr');
-          }
+          } catch (_) {}
         }
       }
       if (list.length < maxResults) break;
@@ -522,8 +493,71 @@ class JiraApiService {
     return results;
   }
 
-  /// Fallback: get issues with no sprint via JQL (project = X AND sprint is EMPTY). Use when board backlog returns empty.
-  Future<List<JiraIssue>> getBacklogIssuesByJql(String projectKey, {String? assignee}) async {
+  /// Fetches one page of backlog issues (board backlog API). Returns issues and whether more pages exist.
+  Future<({List<JiraIssue> issues, bool hasMore})> getBacklogIssuesPage(
+    int boardId, {
+    int startAt = 0,
+    int maxResults = 50,
+    String? assignee,
+  }) async {
+    final params = <String, String>{
+      'startAt': '$startAt',
+      'maxResults': '$maxResults',
+      'fields': 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint',
+    };
+    if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
+      if (assignee == 'unassigned') {
+        params['jql'] = 'assignee is EMPTY';
+      } else {
+        params['jql'] = 'assignee = "$assignee"';
+      }
+    }
+    final uri = Uri.parse('$_baseUrl/rest/agile/1.0/board/$boardId/backlog').replace(queryParameters: params);
+    final r = await http.get(uri, headers: _headers).timeout(_timeout);
+    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+
+    final json = jsonDecode(r.body) as Map<String, dynamic>;
+    List<dynamic> list = (json['issues'] as List<dynamic>?) ?? (json['values'] as List<dynamic>?) ?? [];
+    if (list.isEmpty && json['contents'] is Map) {
+      final contents = json['contents'] as Map<String, dynamic>;
+      list = (contents['issues'] as List<dynamic>?) ?? (contents['values'] as List<dynamic>?) ?? [];
+    }
+    final issues = <JiraIssue>[];
+    for (final e in list) {
+      if (e is Map<String, dynamic>) {
+        try {
+          issues.add(JiraIssue.fromJson(e));
+        } catch (parseErr) {
+          if (debugLog) debugPrint('[JiraAPI] getBacklogIssuesPage skip issue parse: $parseErr');
+        }
+      }
+    }
+    final hasMore = list.length >= maxResults;
+    return (issues: issues, hasMore: hasMore);
+  }
+
+  /// Fetches all backlog issues (paginated). Board backlog = issues not in any sprint.
+  /// Jira Agile API may cap maxResults at 50 per page; may return 'issues' or 'values'.
+  Future<List<JiraIssue>> getBacklogIssues(int boardId, {String? assignee}) async {
+    final results = <JiraIssue>[];
+    int startAt = 0;
+    const maxResults = 50;
+    while (true) {
+      final page = await getBacklogIssuesPage(boardId, startAt: startAt, maxResults: maxResults, assignee: assignee);
+      results.addAll(page.issues);
+      if (!page.hasMore) break;
+      startAt += maxResults;
+    }
+    return results;
+  }
+
+  /// Fetches one page of backlog issues via JQL (project = X AND sprint is EMPTY). Use when board backlog returns empty.
+  Future<({List<JiraIssue> issues, bool hasMore, int total})> getBacklogIssuesByJqlPage(
+    String projectKey, {
+    int startAt = 0,
+    int maxResults = 50,
+    String? assignee,
+  }) async {
     final jql = StringBuffer('project = $projectKey AND sprint is EMPTY');
     if (assignee != null && assignee.isNotEmpty && assignee != 'all') {
       if (assignee == 'unassigned') {
@@ -532,27 +566,39 @@ class JiraApiService {
         jql.write(' AND assignee = "$assignee"');
       }
     }
+    const fields = 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint';
+    final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {
+      'jql': jql.toString(),
+      'startAt': '$startAt',
+      'maxResults': '$maxResults',
+      'fields': fields,
+    });
+    final r = await http.get(uri, headers: _headers).timeout(_timeout);
+    if (r.statusCode != 200) return (issues: <JiraIssue>[], hasMore: false, total: 0);
+    final json = jsonDecode(r.body) as Map<String, dynamic>;
+    final list = (json['issues'] as List<dynamic>?) ?? [];
+    final total = (json['total'] as int?) ?? 0;
+    final issues = <JiraIssue>[];
+    for (final e in list) {
+      if (e is Map<String, dynamic>) {
+        try {
+          issues.add(JiraIssue.fromJson(e));
+        } catch (_) {}
+      }
+    }
+    final hasMore = (startAt + list.length) < total;
+    return (issues: issues, hasMore: hasMore, total: total);
+  }
+
+  /// Fallback: get issues with no sprint via JQL (project = X AND sprint is EMPTY). Use when board backlog returns empty.
+  Future<List<JiraIssue>> getBacklogIssuesByJql(String projectKey, {String? assignee}) async {
     final results = <JiraIssue>[];
     int startAt = 0;
-    const maxResults = 100;
-    const fields = 'summary,status,priority,assignee,issuetype,created,updated,duedate,sprint';
+    const maxResults = 50;
     while (true) {
-      final uri = Uri.parse('$_baseUrl/rest/api/3/search').replace(queryParameters: {
-        'jql': jql.toString(),
-        'startAt': '$startAt',
-        'maxResults': '$maxResults',
-        'fields': fields,
-      });
-      final r = await http.get(uri, headers: _headers).timeout(_timeout);
-      if (r.statusCode != 200) return results;
-      final json = jsonDecode(r.body) as Map<String, dynamic>;
-      final list = (json['issues'] as List<dynamic>?) ?? [];
-      for (final e in list) {
-        if (e is Map<String, dynamic>) {
-          results.add(JiraIssue.fromJson(e));
-        }
-      }
-      if (list.length < maxResults) break;
+      final page = await getBacklogIssuesByJqlPage(projectKey, startAt: startAt, maxResults: maxResults, assignee: assignee);
+      results.addAll(page.issues);
+      if (!page.hasMore) break;
       startAt += maxResults;
     }
     return results;

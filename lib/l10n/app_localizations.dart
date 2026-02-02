@@ -79,6 +79,10 @@ class AppLocalizations {
       'errorDeletingSprint': 'Error deleting sprint: %s',
       'selectedBoardNoProjectKey': 'Selected board has no project key',
       'loadMore': 'Load more',
+      'shareIssueLink': 'Share link',
+      'copyIssueLink': 'Copy link',
+      'openInBrowser': 'Open in browser',
+      'linkCopiedToClipboard': 'Link copied to clipboard',
       'jiraConfiguration': 'Jira Configuration',
       'email': 'Email',
       'jiraUrl': 'Jira URL',
@@ -260,6 +264,10 @@ class AppLocalizations {
       'errorDeletingSprint': 'Lỗi khi xóa sprint: %s',
       'selectedBoardNoProjectKey': 'Bảng đã chọn không có mã dự án',
       'loadMore': 'Tải thêm',
+      'shareIssueLink': 'Chia sẻ liên kết',
+      'copyIssueLink': 'Sao chép liên kết',
+      'openInBrowser': 'Mở trong trình duyệt',
+      'linkCopiedToClipboard': 'Đã sao chép liên kết',
       'jiraConfiguration': 'Cấu hình Jira',
       'email': 'Email',
       'jiraUrl': 'Jira URL',
@@ -443,6 +451,10 @@ class AppLocalizations {
   String get sprintDeleted => _s('sprintDeleted');
   String get selectedBoardNoProjectKey => _s('selectedBoardNoProjectKey');
   String get loadMore => _s('loadMore');
+  String get shareIssueLink => _s('shareIssueLink');
+  String get copyIssueLink => _s('copyIssueLink');
+  String get openInBrowser => _s('openInBrowser');
+  String get linkCopiedToClipboard => _s('linkCopiedToClipboard');
   String get jiraConfiguration => _s('jiraConfiguration');
   String get email => _s('email');
   String get jiraUrl => _s('jiraUrl');

@@ -28,6 +28,8 @@ class IssueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusCat = issue.fields.status.statusCategory.key;
     final statusColor = _statusColor(statusCat);
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
 
     return Card(
       elevation: 2,
@@ -45,10 +47,10 @@ class IssueCard extends StatelessWidget {
                 children: [
                   Text(
                     issue.key,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
+                      color: colorScheme.primary,
                     ),
                   ),
                   const Spacer(),
@@ -80,9 +82,13 @@ class IssueCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 issue.fields.summary,
-                style: const TextStyle(
+                style: textTheme.bodyLarge?.copyWith(
                   fontSize: 16,
-                  color: AppTheme.textPrimary,
+                  color: colorScheme.onSurface,
+                  fontWeight: FontWeight.w500,
+                ) ?? TextStyle(
+                  fontSize: 16,
+                  color: colorScheme.onSurface,
                   fontWeight: FontWeight.w500,
                 ),
                 maxLines: 2,
@@ -94,14 +100,14 @@ class IssueCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceMuted,
+                      color: colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       issue.fields.issuetype.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppTheme.textSecondary,
+                        color: colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -113,7 +119,7 @@ class IssueCard extends StatelessWidget {
                       children: [
                         CircleAvatar(
                           radius: 12,
-                          backgroundColor: AppTheme.primary,
+                          backgroundColor: colorScheme.primary,
                           backgroundImage: issue.fields.assignee!.avatar48 != null
                               ? NetworkImage(issue.fields.assignee!.avatar48!)
                               : null,
@@ -129,12 +135,15 @@ class IssueCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         Text(
                           issue.fields.assignee!.displayName,
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                         ),
                       ],
                     )
                   else
-                    Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                    Text(
+                      AppLocalizations.of(context).unassigned,
+                      style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                    ),
                 ],
               ),
             ],

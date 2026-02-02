@@ -50,6 +50,9 @@ class AppTheme {
       primary: primary,
       surface: surfaceLight,
       error: error,
+    ).copyWith(
+      errorContainer: errorBg,
+      onErrorContainer: error,
     );
     return ThemeData(
       useMaterial3: true,
@@ -115,6 +118,8 @@ class AppTheme {
     const surfaceDark = Color(0xFF1E2128);
     const surfaceCardDark = Color(0xFF252A33);
     const textPrimaryDark = Color(0xFFE6EDFA);
+    const textSecondaryDark = Color(0xFFB6C2CF);
+    const hintDark = Color(0xFF8C9BAB);
 
     final colorScheme = ColorScheme.fromSeed(
       seedColor: primaryDark,
@@ -122,6 +127,13 @@ class AppTheme {
       primary: primaryDark,
       surface: surfaceDark,
       error: const Color(0xFFE34935),
+    ).copyWith(
+      surfaceContainerHighest: surfaceCardDark,
+      surfaceContainerHigh: const Color(0xFF2C323C),
+      onSurface: textPrimaryDark,
+      onSurfaceVariant: textSecondaryDark,
+      errorContainer: const Color(0xFF5C2A26),
+      onErrorContainer: const Color(0xFFF5D5D2),
     );
     return ThemeData(
       useMaterial3: true,
@@ -147,6 +159,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceCardDark,
+        hintStyle: const TextStyle(color: hintDark, fontSize: 14),
+        labelStyle: const TextStyle(color: textSecondaryDark),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),

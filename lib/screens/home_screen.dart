@@ -30,6 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
   JiraBoard? _selectedBoard;
   List<JiraIssue> _issues = [];
   List<JiraIssue> _backlogIssues = [];
+  bool _backlogHasMore = false;
+  bool _backlogLoadingMore = false;
+  bool _backlogUseJql = false;
+  String? _backlogProjectKey;
   List<JiraSprint> _sprints = [];
   JiraSprint? _activeSprint;
   List<BoardAssignee> _assignees = [];
@@ -49,8 +53,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _backlogCollapsed = false;
   JiraUser? _currentUser;
 
-  /// Backlog screen shows only User Story, Bug, Task (no Epic, Sub-task, etc.)
-  static const _backlogAllowedIssueTypes = {'user story', 'bug', 'task'};
+  /// Backlog screen shows User Story, Story, Bug, Task (no Epic, Sub-task, etc.)
+  static const _backlogAllowedIssueTypes = {'user story', 'story', 'bug', 'task'};
 
   bool _isAllowedOnBacklogScreen(JiraIssue issue) {
     return _backlogAllowedIssueTypes.contains(issue.fields.issuetype.name.toLowerCase());
@@ -177,41 +181,51 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
         if (tab == 1) {
-          // Backlog tab: Load backlog issues (board backlog API)
+          // Backlog tab: Load first page of backlog (with pagination; "Load more" fetches next pages)
+          final assigneeParam = _selectedAssignee == 'all' ? null : _selectedAssignee;
           var backlog = <JiraIssue>[];
+          var backlogHasMore = false;
+          var backlogUseJql = false;
+          String? backlogProjectKey = board?.location?.projectKey;
+          if ((backlogProjectKey == null || backlogProjectKey.isEmpty) && boardId != 0) {
+            final fullBoard = await api.getBoardById(boardId);
+            backlogProjectKey = fullBoard?.location?.projectKey;
+          }
           try {
-            backlog = await api.getBacklogIssues(
+            final page = await api.getBacklogIssuesPage(
               boardId,
-              assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+              startAt: 0,
+              maxResults: 50,
+              assignee: assigneeParam,
             );
+            backlog = page.issues;
+            backlogHasMore = page.hasMore;
           } catch (e) {
             debugPrint('Backlog API failed (will try JQL fallback): $e');
           }
-          // Resolve projectKey for JQL fallback (board list may omit location)
-          String? projectKey = board?.location?.projectKey;
-          if ((projectKey == null || projectKey.isEmpty) && boardId != 0) {
-            final fullBoard = await api.getBoardById(boardId);
-            projectKey = fullBoard?.location?.projectKey;
-          }
-          // Fallback: if board backlog returned empty or threw, try JQL (project AND sprint is EMPTY)
-          if (backlog.isEmpty && projectKey != null && projectKey.isNotEmpty) {
+          if (backlog.isEmpty && backlogProjectKey != null && backlogProjectKey.isNotEmpty) {
             try {
-              backlog = await api.getBacklogIssuesByJql(
-                projectKey,
-                assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+              final page = await api.getBacklogIssuesByJqlPage(
+                backlogProjectKey,
+                startAt: 0,
+                maxResults: 50,
+                assignee: assigneeParam,
               );
+              backlog = page.issues;
+              backlogHasMore = page.hasMore;
+              backlogUseJql = true;
             } catch (e) {
               debugPrint('Backlog JQL fallback failed: $e');
             }
           }
-          // Last resort: fetch all board issues and keep only those with no sprint
           if (backlog.isEmpty) {
             try {
               final allBoard = await api.getBoardIssuesAll(
                 boardId,
-                assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+                assignee: assigneeParam,
               );
               backlog = allBoard.where((i) => i.fields.sprint == null).toList();
+              backlogHasMore = false;
             } catch (e) {
               debugPrint('Backlog board-issues fallback failed: $e');
             }
@@ -225,9 +239,8 @@ class _HomeScreenState extends State<HomeScreen> {
               final sprintIssues = await api.getSprintIssues(
                 boardId,
                 sprint.id,
-                assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+                assignee: assigneeParam,
               );
-              // Deduplicate by issue key
               for (final issue in sprintIssues) {
                 if (!issueKeys.contains(issue.key)) {
                   issueKeys.add(issue.key);
@@ -236,12 +249,15 @@ class _HomeScreenState extends State<HomeScreen> {
               }
             } catch (e) {
               debugPrint('Error loading sprint ${sprint.id}: $e');
-              // Continue loading other sprints
             }
           }
-          
+
           setState(() {
             _backlogIssues = backlog;
+            _backlogHasMore = backlogHasMore;
+            _backlogLoadingMore = false;
+            _backlogUseJql = backlogUseJql;
+            _backlogProjectKey = backlogProjectKey;
             _issues = allSprintIssues;
             _assignees = assigneesData;
             _loading = false;
@@ -258,12 +274,14 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       final assigneeParam = _selectedAssignee == 'all' ? null : _selectedAssignee;
-      final issues = await api.getBoardIssues(boardId, assignee: assigneeParam);
+      final issues = await api.getBoardIssuesAll(boardId, assignee: assigneeParam);
       setState(() {
         _sprints = [];
         _activeSprint = null;
         _issues = issues;
         _backlogIssues = [];
+        _backlogHasMore = false;
+        _backlogLoadingMore = false;
         _assignees = assigneesData;
         _loading = false;
       });
@@ -288,6 +306,49 @@ class _HomeScreenState extends State<HomeScreen> {
       await _loadBoards(reset: true);
     }
     if (mounted) setState(() => _refreshing = false);
+  }
+
+  static const int _backlogPageSize = 50;
+
+  Future<void> _loadMoreBacklog() async {
+    if (_backlogLoadingMore || !_backlogHasMore || _selectedBoard == null) return;
+    final boardId = _selectedBoard!.id;
+    final assigneeParam = _selectedAssignee == 'all' ? null : _selectedAssignee;
+    setState(() => _backlogLoadingMore = true);
+    try {
+      if (_backlogUseJql && _backlogProjectKey != null && _backlogProjectKey!.isNotEmpty) {
+        final page = await context.read<JiraApiService>().getBacklogIssuesByJqlPage(
+          _backlogProjectKey!,
+          startAt: _backlogIssues.length,
+          maxResults: _backlogPageSize,
+          assignee: assigneeParam,
+        );
+        if (mounted) {
+          setState(() {
+            _backlogIssues = [..._backlogIssues, ...page.issues];
+            _backlogHasMore = page.hasMore;
+            _backlogLoadingMore = false;
+          });
+        }
+      } else {
+        final page = await context.read<JiraApiService>().getBacklogIssuesPage(
+          boardId,
+          startAt: _backlogIssues.length,
+          maxResults: _backlogPageSize,
+          assignee: assigneeParam,
+        );
+        if (mounted) {
+          setState(() {
+            _backlogIssues = [..._backlogIssues, ...page.issues];
+            _backlogHasMore = page.hasMore;
+            _backlogLoadingMore = false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Load more backlog failed: $e');
+      if (mounted) setState(() => _backlogLoadingMore = false);
+    }
   }
 
   void _showSnack(String message, {bool isError = false}) {
@@ -474,16 +535,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
     if (_loading && !_refreshing && _boards.isEmpty) {
       return Scaffold(
-        backgroundColor: AppTheme.surfaceLight,
+        backgroundColor: colorScheme.surface,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const CircularProgressIndicator(color: AppTheme.primary),
+              CircularProgressIndicator(color: colorScheme.primary),
               const SizedBox(height: 16),
-              Text(AppLocalizations.of(context).loadingJiraBoard, style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+              Text(
+                AppLocalizations.of(context).loadingJiraBoard,
+                style: textTheme.bodyLarge?.copyWith(color: colorScheme.onSurfaceVariant) ?? TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 16),
+              ),
             ],
           ),
         ),
@@ -491,7 +558,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppTheme.surfaceLight,
+      backgroundColor: colorScheme.surface,
       drawer: _buildDrawer(),
       body: SafeArea(
         child: Column(
@@ -634,7 +701,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.language, color: AppTheme.textPrimary),
+              leading: Icon(Icons.language, color: Theme.of(context).colorScheme.onSurface),
               title: Text(AppLocalizations.of(context).language, style: const TextStyle(fontWeight: FontWeight.w500)),
               onTap: () {
                 Navigator.of(context).pop();
@@ -642,7 +709,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.settings, color: AppTheme.textPrimary),
+              leading: Icon(Icons.settings, color: Theme.of(context).colorScheme.onSurface),
               title: Text(AppLocalizations.of(context).settings, style: const TextStyle(fontWeight: FontWeight.w500)),
               onTap: () {
                 Navigator.of(context).pop();
@@ -652,8 +719,8 @@ class _HomeScreenState extends State<HomeScreen> {
             const Spacer(),
             const Divider(height: 1),
             ListTile(
-              leading: const Icon(Icons.logout, color: AppTheme.error),
-              title: Text(AppLocalizations.of(context).logout, style: const TextStyle(fontWeight: FontWeight.w500, color: AppTheme.error)),
+              leading: Icon(Icons.logout, color: Theme.of(context).colorScheme.error),
+              title: Text(AppLocalizations.of(context).logout, style: TextStyle(fontWeight: FontWeight.w500, color: Theme.of(context).colorScheme.error)),
               onTap: () {
                 Navigator.of(context).pop();
                 _showLogoutConfirm();
@@ -726,18 +793,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildErrorBanner() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final errorColor = colorScheme.error;
+    final errorBg = colorScheme.errorContainer;
+    final onErrorBg = colorScheme.onErrorContainer;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-      color: AppTheme.errorBg,
+      color: errorBg,
       child: Row(
         children: [
-          const Icon(Icons.error_outline, size: 20, color: AppTheme.error),
+          Icon(Icons.error_outline, size: 20, color: onErrorBg),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _error!,
-              style: const TextStyle(color: AppTheme.error, fontSize: 13),
+              style: TextStyle(color: onErrorBg, fontSize: 13),
             ),
           ),
           Semantics(
@@ -745,14 +816,14 @@ class _HomeScreenState extends State<HomeScreen> {
             button: true,
             child: TextButton(
               onPressed: () => _refresh(),
-              child: Text(AppLocalizations.of(context).retry, style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.error)),
+              child: Text(AppLocalizations.of(context).retry, style: TextStyle(fontWeight: FontWeight.w600, color: errorColor)),
             ),
           ),
           Semantics(
             label: AppLocalizations.of(context).dismissError,
             button: true,
             child: IconButton(
-              icon: const Icon(Icons.close, size: 20, color: AppTheme.error),
+              icon: Icon(Icons.close, size: 20, color: onErrorBg),
               onPressed: () => setState(() => _errorDismissed = true),
               tooltip: AppLocalizations.of(context).dismiss,
             ),
@@ -763,21 +834,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBoardSelector() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Material(
-      color: Colors.white,
+      color: colorScheme.surface,
       child: InkWell(
         onTap: () => setState(() => _boardDropdownOpen = !_boardDropdownOpen),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: const BoxDecoration(
-            border: Border(bottom: BorderSide(color: AppTheme.borderLight)),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
           ),
           child: Row(
             children: [
               Text(
                 AppLocalizations.of(context).board + ':',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -785,11 +857,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   _selectedBoard != null
                       ? '${_selectedBoard!.name} (${_selectedBoard!.type})'
                       : AppLocalizations.of(context).selectBoard + '...',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: AppTheme.textPrimary),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: colorScheme.onSurface),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Icon(_boardDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: AppTheme.textSecondary),
+              Icon(_boardDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down, color: colorScheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -800,8 +872,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTabs() {
     final isKanban = _selectedBoard!.type.toLowerCase() == 'kanban';
     if (isKanban) return const SizedBox.shrink();
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      color: Colors.white,
+      color: colorScheme.surface,
       child: Row(
         children: [
           Expanded(child: _tab(0, AppLocalizations.of(context).board, Icons.dashboard)),
@@ -813,15 +886,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAssigneeFilter() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      color: Colors.white,
+      color: colorScheme.surface,
       child: Row(
         children: [
           Text(
             AppLocalizations.of(context).assignee + ':',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colorScheme.onSurfaceVariant),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -844,24 +918,34 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _assigneeChip(String label, String value) {
     final selected = _selectedAssignee == value;
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
-        label: Text(label, style: TextStyle(fontSize: 13, color: selected ? Colors.white : null)),
+        label: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: selected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+          ),
+        ),
         selected: selected,
         onSelected: (sel) async {
           if (!sel) return;
           setState(() => _selectedAssignee = value);
           if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id);
         },
-        selectedColor: AppTheme.primary,
-        checkmarkColor: Colors.white,
+        selectedColor: colorScheme.primary,
+        checkmarkColor: colorScheme.onPrimary,
       ),
     );
   }
 
   Widget _tab(int index, String label, IconData icon) {
     final active = _activeTab == index;
+    final colorScheme = Theme.of(context).colorScheme;
+    final primary = colorScheme.primary;
+    final muted = colorScheme.onSurfaceVariant;
     return InkWell(
       onTap: () async {
         setState(() => _activeTab = index);
@@ -872,7 +956,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: active ? AppTheme.primary : Colors.transparent,
+              color: active ? primary : Colors.transparent,
               width: 2,
             ),
           ),
@@ -880,14 +964,14 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: active ? AppTheme.primary : AppTheme.textMuted),
+            Icon(icon, size: 18, color: active ? primary : muted),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                color: active ? AppTheme.primary : AppTheme.textMuted,
+                color: active ? primary : muted,
               ),
             ),
           ],
@@ -899,20 +983,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSprintCard() {
     if (_activeSprint == null) return const SizedBox.shrink();
     final s = _activeSprint!;
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.primaryBg,
+        color: colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(14),
-        border: const Border(left: BorderSide(color: AppTheme.primary, width: 4)),
+        border: Border(left: BorderSide(color: colorScheme.primary, width: 4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('🏃 ${s.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+              Text(
+                '🏃 ${s.name}',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onPrimaryContainer),
+              ),
             ],
           ),
           if (s.startDate != null || s.endDate != null) ...[
@@ -920,10 +1008,16 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 if (s.startDate != null)
-                  Text('Start: ${_formatDate(s.startDate!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text(
+                    'Start: ${_formatDate(s.startDate!)}',
+                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  ),
                 if (s.startDate != null && s.endDate != null) const SizedBox(width: 16),
                 if (s.endDate != null)
-                  Text('End: ${_formatDate(s.endDate!)}', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                  Text(
+                    'End: ${_formatDate(s.endDate!)}',
+                    style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  ),
               ],
             ),
           ],
@@ -992,16 +1086,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildContent() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     if (_boardDropdownOpen) {
       return _buildBoardDropdown();
     }
     if (_selectedBoard == null) {
       return Center(
-        child: Text(AppLocalizations.of(context).selectBoardToViewIssues, style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
+        child: Text(
+          AppLocalizations.of(context).selectBoardToViewIssues,
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 15),
+        ),
       );
     }
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
+      return Center(child: CircularProgressIndicator(color: colorScheme.primary));
     }
     // Backlog tab shows sprint groups + backlog; empty only when no groups at all
     final isEmptyForCurrentView = _activeTab == 1
@@ -1016,17 +1115,17 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.inbox, size: 64, color: Theme.of(context).colorScheme.outline),
+              Icon(Icons.inbox, size: 64, color: colorScheme.outline),
               const SizedBox(height: AppTheme.spaceLg),
               Text(
                 AppLocalizations.of(context).noIssuesFound,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.textSecondary),
+                style: textTheme.titleLarge?.copyWith(color: colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppTheme.spaceSm),
               Text(
                 _selectedBoard != null ? AppLocalizations.of(context).thisBoardHasNoIssues : AppLocalizations.of(context).selectBoardToViewIssues + '.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.textMuted),
+                style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
                 textAlign: TextAlign.center,
               ),
               if (_selectedBoard != null) ...[
@@ -1057,7 +1156,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_activeTab == 0 && _selectedBoard!.type.toLowerCase() != 'kanban' && _groupedByStatus.isNotEmpty) {
       return RefreshIndicator(
         onRefresh: _refresh,
-        color: AppTheme.primary,
+        color: colorScheme.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: _groupedByStatus.length,
@@ -1098,16 +1197,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (_activeTab == 2 && _groupedByDueDate.entries.any((e) => e.value.isNotEmpty)) {
       final timelineColors = <String, Color>{
-        'Overdue': AppTheme.error,
+        'Overdue': colorScheme.error,
         'Today': AppTheme.success,
-        'This week': AppTheme.primary,
+        'This week': colorScheme.primary,
         'Next week': AppTheme.statusTodo,
-        'Later': AppTheme.textSecondary,
-        'No due date': AppTheme.textMuted,
+        'Later': colorScheme.onSurfaceVariant,
+        'No due date': colorScheme.outline,
       };
       return RefreshIndicator(
         onRefresh: _refresh,
-        color: AppTheme.primary,
+        color: colorScheme.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).length,
@@ -1152,7 +1251,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_activeTab == 1 && _groupedBySprint.isNotEmpty) {
       return RefreshIndicator(
         onRefresh: _refresh,
-        color: AppTheme.primary,
+        color: colorScheme.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           itemCount: _groupedBySprint.length,
@@ -1187,10 +1286,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     margin: const EdgeInsets.only(bottom: 8),
                     decoration: BoxDecoration(
-                      color: isActiveSprint ? AppTheme.primaryBg : AppTheme.surfaceMuted,
+                      color: isActiveSprint ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(8),
                       border: isActiveSprint
-                          ? Border.all(color: AppTheme.primary, width: 2)
+                          ? Border.all(color: colorScheme.primary, width: 2)
                           : null,
                     ),
                     child: Row(
@@ -1200,7 +1299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? Icons.chevron_right
                               : Icons.expand_more,
                           size: 20,
-                          color: AppTheme.textSecondary,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1212,10 +1311,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Expanded(
                                     child: Text(
                                       isBacklog ? '📋 ${AppLocalizations.of(context).backlog}' : '🏃 ${group.sprint}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w700,
-                                        color: AppTheme.textPrimary,
+                                        color: colorScheme.onSurface,
                                       ),
                                     ),
                                   ),
@@ -1223,13 +1322,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
-                                        color: AppTheme.primary,
+                                        color: colorScheme.primary,
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         AppLocalizations.of(context).active,
                                         style: TextStyle(
-                                          color: Colors.white,
+                                          color: colorScheme.onPrimary,
                                           fontSize: 10,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -1238,7 +1337,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   if (!isBacklog && group.sprintId != null)
                                     PopupMenuButton<String>(
                                       padding: EdgeInsets.zero,
-                                      icon: const Icon(Icons.more_vert, size: 20, color: AppTheme.textSecondary),
+                                      icon: Icon(Icons.more_vert, size: 20, color: colorScheme.onSurfaceVariant),
                                       onSelected: (value) {
                                         if (value == 'update') {
                                           _openUpdateSprint(group.sprintId!, group.sprint);
@@ -1251,7 +1350,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           value: 'update',
                                           child: Row(
                                             children: [
-                                              const Icon(Icons.edit, size: 20, color: AppTheme.textSecondary),
+                                              Icon(Icons.edit, size: 20, color: colorScheme.onSurfaceVariant),
                                               const SizedBox(width: 8),
                                               Text(AppLocalizations.of(context).updateSprint),
                                             ],
@@ -1261,9 +1360,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                           value: 'delete',
                                           child: Row(
                                             children: [
-                                              const Icon(Icons.delete_outline, size: 20, color: AppTheme.error),
+                                              Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
                                               const SizedBox(width: 8),
-                                              Text(AppLocalizations.of(context).deleteSprint, style: const TextStyle(color: AppTheme.error, fontWeight: FontWeight.w600)),
+                                              Text(AppLocalizations.of(context).deleteSprint, style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.w600)),
                                             ],
                                           ),
                                         ),
@@ -1275,9 +1374,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '${group.issues.length} issues  •  ✅ $doneCount  •  🔄 $inProgressCount  •  📝 $todoCount',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
-                                    color: AppTheme.textSecondary,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -1294,6 +1393,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         issue: issue,
                         onTap: () => _openIssue(issue.key),
                       )),
+                if (isBacklog && _backlogHasMore)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: _backlogLoadingMore
+                          ? SizedBox(
+                              height: 32,
+                              width: 32,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
+                            )
+                          : TextButton.icon(
+                              onPressed: _loadMoreBacklog,
+                              icon: Icon(Icons.add_circle_outline, size: 20, color: colorScheme.primary),
+                              label: Text(
+                                AppLocalizations.of(context).loadMore,
+                                style: TextStyle(color: colorScheme.primary),
+                              ),
+                            ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
               ],
             );
@@ -1304,7 +1423,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return RefreshIndicator(
       onRefresh: _refresh,
-      color: AppTheme.primary,
+      color: colorScheme.primary,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         itemCount: _filteredIssues.length,
@@ -1331,6 +1450,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBoardDropdown() {
+    final colorScheme = Theme.of(context).colorScheme;
     // Do not wrap in Expanded: caller already uses Expanded(child: _buildContent())
     return Column(
       mainAxisSize: MainAxisSize.max,
@@ -1377,17 +1497,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 return ListTile(
                   leading: Icon(
                     b.type.toLowerCase() == 'kanban' ? Icons.view_kanban : Icons.directions_run,
-                    color: selected ? AppTheme.primary : null,
+                    color: selected ? colorScheme.primary : colorScheme.onSurfaceVariant,
                   ),
                   title: Text(
                     b.name,
                     style: TextStyle(
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                      color: selected ? AppTheme.primary : AppTheme.textPrimary,
+                      color: selected ? colorScheme.primary : colorScheme.onSurface,
                     ),
                   ),
                   subtitle: b.location?.projectName != null ? Text('📁 ${b.location!.projectName}') : null,
-                  trailing: selected ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                  trailing: selected ? Icon(Icons.check, color: colorScheme.primary) : null,
                   onTap: () async {
                     setState(() {
                       _selectedBoard = b;

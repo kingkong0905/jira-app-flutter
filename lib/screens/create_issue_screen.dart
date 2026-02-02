@@ -296,7 +296,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? AppTheme.error : AppTheme.primary,
+        backgroundColor: isError ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -388,7 +388,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                       const SizedBox(height: 4),
                       Text(
                         AppLocalizations.of(context).createEpicOrStoryFirst,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textMuted, fontStyle: FontStyle.italic),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
                       ),
                     ],
                     const SizedBox(height: 20),
@@ -407,16 +407,16 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   const SizedBox(height: 8),
                   Container(
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppTheme.border),
+                      border: Border.all(color: Theme.of(context).colorScheme.outline),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
                       children: [
                         // Toolbar
                         Container(
-                          decoration: const BoxDecoration(
-                            color: AppTheme.surfaceMuted,
-                            borderRadius: BorderRadius.vertical(top: Radius.circular(7)),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(7)),
                           ),
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -454,9 +454,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                         // Editor
                         Container(
                           height: 200,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.vertical(bottom: Radius.circular(7)),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: const BorderRadius.vertical(bottom: Radius.circular(7)),
                           ),
                           child: quill.QuillEditor.basic(
                             controller: _descriptionController,
@@ -523,18 +523,18 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                       child: ElevatedButton(
                         onPressed: _creating ? null : _handleCreate,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primary,
-                          foregroundColor: Colors.white,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Theme.of(context).colorScheme.onPrimary,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           elevation: 0,
                         ),
                         child: _creating
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                child: CircularProgressIndicator(color: Theme.of(context).colorScheme.onPrimary, strokeWidth: 2),
                               )
-                            : Text(AppLocalizations.of(context).createIssue, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                            : Text(AppLocalizations.of(context).createIssue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onPrimary)),
                       ),
                     ),
                   ),
@@ -545,12 +545,13 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
   }
 
   Widget _buildSectionHeader(String title) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-          color: AppTheme.textPrimary,
+          color: colorScheme.onSurface,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -558,27 +559,29 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
   }
 
   Widget _buildFieldLabel(String label, {bool required = false}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Text.rich(
       TextSpan(
         text: label,
-        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
         children: required
-            ? [const TextSpan(text: ' *', style: TextStyle(color: AppTheme.error))]
+            ? [TextSpan(text: ' *', style: TextStyle(color: colorScheme.error))]
             : [],
       ),
     );
   }
 
   Widget _buildDropdownButton({required String value, VoidCallback? onTap, Widget? trailing}) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.border),
+          border: Border.all(color: colorScheme.outline),
         ),
         child: Row(
           children: [
@@ -587,11 +590,11 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                 value,
                 style: TextStyle(
                   fontSize: 14,
-                  color: onTap == null ? AppTheme.textMuted : AppTheme.textPrimary,
+                  color: onTap == null ? colorScheme.onSurfaceVariant : colorScheme.onSurface,
                 ),
               ),
             ),
-            trailing ?? const Icon(Icons.arrow_drop_down, color: AppTheme.textMuted),
+            trailing ?? Icon(Icons.arrow_drop_down, color: colorScheme.onSurfaceVariant),
           ],
         ),
       ),
@@ -599,6 +602,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
   }
 
   Widget _buildAssigneeButton() {
+    final colorScheme = Theme.of(context).colorScheme;
     final selectedUser = _selectedAssignee != null
         ? _assignableUsers.where((u) => u.accountId == _selectedAssignee).firstOrNull
         : null;
@@ -609,9 +613,9 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.border),
+          border: Border.all(color: colorScheme.outline),
         ),
         child: Row(
           children: [
@@ -622,11 +626,11 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                 child: CircleAvatar(
                   radius: 16,
                   backgroundImage: selectedUser.avatar48 != null ? NetworkImage(selectedUser.avatar48!) : null,
-                  backgroundColor: AppTheme.primary,
+                  backgroundColor: colorScheme.primary,
                   child: selectedUser.avatar48 == null
                       ? Text(
                           selectedUser.displayName.isNotEmpty ? selectedUser.displayName[0].toUpperCase() : '?',
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                          style: TextStyle(color: colorScheme.onPrimary, fontSize: 12, fontWeight: FontWeight.bold),
                         )
                       : null,
                 ),
@@ -638,25 +642,23 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: AppTheme.borderLight,
+                    color: colorScheme.surfaceContainerHighest,
                     shape: BoxShape.circle,
                   ),
-                  child: const Center(
-                    child: Icon(Icons.person_off, color: Colors.white, size: 16),
-                  ),
+                  child: Icon(Icons.person_off, color: colorScheme.onSurfaceVariant, size: 16),
                 ),
               ),
             // Name
             Expanded(
               child: Text(
                 _getSelectedAssigneeName(),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.textPrimary,
+                  color: colorScheme.onSurface,
                 ),
               ),
             ),
-            const Icon(Icons.arrow_drop_down, color: AppTheme.textMuted),
+            Icon(Icons.arrow_drop_down, color: colorScheme.onSurfaceVariant),
           ],
         ),
       ),
@@ -664,21 +666,22 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
   }
 
   InputDecoration _inputDecoration(String hint) {
+    final colorScheme = Theme.of(context).colorScheme;
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: Colors.white,
+      fillColor: colorScheme.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppTheme.border),
+        borderSide: BorderSide(color: colorScheme.outline),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppTheme.border),
+        borderSide: BorderSide(color: colorScheme.outline),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppTheme.primary, width: 2),
+        borderSide: BorderSide(color: colorScheme.primary, width: 2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     );
@@ -781,12 +784,13 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
     required dynamic selectedId,
     required Function(dynamic) onSelect,
   }) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.only(top: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
           const Divider(height: 24),
           ListView(
             shrinkWrap: true,
@@ -794,7 +798,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
               final isSelected = item['id'] == selectedId;
               return ListTile(
                 title: Text(item['name']),
-                trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                trailing: isSelected ? Icon(Icons.check, color: colorScheme.primary) : null,
                 onTap: () => onSelect(item['id']),
               );
             }).toList(),
@@ -810,14 +814,7 @@ class _CreateIssueScreenState extends State<CreateIssueScreen> {
       initialDate: _dueDate ?? DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: AppTheme.primary),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => child!,
     );
 
     if (picked != null) {
@@ -896,14 +893,15 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
       padding: const EdgeInsets.only(top: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -916,7 +914,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                 Expanded(
                   child: Text(
                     AppLocalizations.of(context).selectAssignee,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -953,7 +951,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.border),
+                  borderSide: BorderSide(color: colorScheme.outline),
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 isDense: true,
@@ -967,7 +965,7 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                 ? Padding(
                     padding: const EdgeInsets.all(24),
                     child: Center(
-                      child: Text(AppLocalizations.of(context).noUsersFound, style: const TextStyle(color: AppTheme.textMuted)),
+                      child: Text(AppLocalizations.of(context).noUsersFound, style: TextStyle(color: colorScheme.onSurfaceVariant)),
                     ),
                   )
                 : ListView(
@@ -980,16 +978,14 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: AppTheme.border,
+                              color: colorScheme.surfaceContainerHighest,
                               shape: BoxShape.circle,
                             ),
-                            child: const Center(
-                              child: Icon(Icons.person_off, color: Colors.white, size: 20),
-                            ),
+                            child: Icon(Icons.person_off, color: colorScheme.onSurfaceVariant, size: 20),
                           ),
-                          title: Text(AppLocalizations.of(context).unassigned, style: const TextStyle(fontStyle: FontStyle.italic)),
+                          title: Text(AppLocalizations.of(context).unassigned, style: TextStyle(fontStyle: FontStyle.italic, color: colorScheme.onSurface)),
                           trailing: widget.selectedAssignee == null
-                              ? const Icon(Icons.check, color: AppTheme.primary)
+                              ? Icon(Icons.check, color: colorScheme.primary)
                               : null,
                           onTap: () {
                             widget.onSelect(null);
@@ -1003,19 +999,19 @@ class _AssigneePickerSheetState extends State<_AssigneePickerSheet> {
                           leading: CircleAvatar(
                             radius: 20,
                             backgroundImage: user.avatar48 != null ? NetworkImage(user.avatar48!) : null,
-                            backgroundColor: AppTheme.primary,
+                            backgroundColor: colorScheme.primary,
                             child: user.avatar48 == null
                                 ? Text(
                                     user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    style: TextStyle(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
                                   )
                                 : null,
                           ),
-                          title: Text(user.displayName),
+                          title: Text(user.displayName, style: TextStyle(color: colorScheme.onSurface)),
                           subtitle: user.emailAddress != null
-                              ? Text(user.emailAddress!, style: const TextStyle(fontSize: 12, color: AppTheme.textMuted))
+                              ? Text(user.emailAddress!, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant))
                               : null,
-                          trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                          trailing: isSelected ? Icon(Icons.check, color: colorScheme.primary) : null,
                           onTap: () {
                             widget.onSelect(user.accountId);
                             Navigator.pop(context);
@@ -1153,14 +1149,15 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.75,
       ),
       padding: const EdgeInsets.only(top: 16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1170,10 +1167,10 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Select Parent Issue',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: colorScheme.onSurface),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -1210,7 +1207,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                     : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: AppTheme.border),
+                  borderSide: BorderSide(color: colorScheme.outline),
                 ),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 isDense: true,
@@ -1224,7 +1221,7 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                 ? Padding(
                     padding: const EdgeInsets.all(24),
                     child: Center(
-                      child: Text(AppLocalizations.of(context).noIssuesFound, style: const TextStyle(color: AppTheme.textMuted)),
+                      child: Text(AppLocalizations.of(context).noIssuesFound, style: TextStyle(color: colorScheme.onSurfaceVariant)),
                     ),
                   )
                 : ListView.builder(
@@ -1233,9 +1230,9 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                       // "None" option when not searching
                       if (_searchController.text.isEmpty && index == 0) {
                         return ListTile(
-                          title: Text(AppLocalizations.of(context).none, style: const TextStyle(fontStyle: FontStyle.italic)),
+                          title: Text(AppLocalizations.of(context).none, style: TextStyle(fontStyle: FontStyle.italic, color: colorScheme.onSurface)),
                           trailing: widget.selectedParentKey == null
-                              ? const Icon(Icons.check, color: AppTheme.primary)
+                              ? Icon(Icons.check, color: colorScheme.primary)
                               : null,
                           onTap: () {
                             widget.onSelect(null);
@@ -1250,14 +1247,14 @@ class _ParentPickerSheetState extends State<_ParentPickerSheet> {
                       final isSelected = widget.selectedParentKey == issue.key;
                       
                       return ListTile(
-                        title: Text(issue.key, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        title: Text(issue.key, style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
                         subtitle: Text(
                           issue.fields.summary,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
                         ),
-                        trailing: isSelected ? const Icon(Icons.check, color: AppTheme.primary) : null,
+                        trailing: isSelected ? Icon(Icons.check, color: colorScheme.primary) : null,
                         onTap: () {
                           widget.onSelect(issue.key);
                           Navigator.pop(context);
