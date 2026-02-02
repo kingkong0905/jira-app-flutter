@@ -60,6 +60,8 @@ class AppLocalizations {
       'updateSprint': 'Update sprint',
       'deleteSprint': 'Delete sprint',
       'deleteSprintConfirm': 'Are you sure you want to delete "%s"? This action cannot be undone.',
+      'completeSprint': 'Complete sprint',
+      'startSprint': 'Start sprint',
       'start': 'Start',
       'end': 'End',
       'retryLoading': 'Retry loading',
@@ -77,6 +79,10 @@ class AppLocalizations {
       'failedToDeleteSprint': 'Failed to delete sprint: %s',
       'sprintDeleted': 'Sprint deleted',
       'errorDeletingSprint': 'Error deleting sprint: %s',
+      'sprintCompleted': 'Sprint completed',
+      'sprintStarted': 'Sprint started',
+      'errorCompletingSprint': 'Error completing sprint: %s',
+      'errorStartingSprint': 'Error starting sprint: %s',
       'selectedBoardNoProjectKey': 'Selected board has no project key',
       'loadMore': 'Load more',
       'shareIssueLink': 'Share link',
@@ -260,6 +266,8 @@ class AppLocalizations {
       'updateSprint': 'Cập nhật sprint',
       'deleteSprint': 'Xóa sprint',
       'deleteSprintConfirm': 'Bạn có chắc muốn xóa "%s"? Hành động này không thể hoàn tác.',
+      'completeSprint': 'Hoàn thành sprint',
+      'startSprint': 'Bắt đầu sprint',
       'start': 'Bắt đầu',
       'end': 'Kết thúc',
       'retryLoading': 'Thử tải lại',
@@ -277,6 +285,10 @@ class AppLocalizations {
       'failedToDeleteSprint': 'Xóa sprint thất bại: %s',
       'sprintDeleted': 'Đã xóa sprint',
       'errorDeletingSprint': 'Lỗi khi xóa sprint: %s',
+      'sprintCompleted': 'Đã hoàn thành sprint',
+      'sprintStarted': 'Đã bắt đầu sprint',
+      'errorCompletingSprint': 'Lỗi khi hoàn thành sprint: %s',
+      'errorStartingSprint': 'Lỗi khi bắt đầu sprint: %s',
       'selectedBoardNoProjectKey': 'Bảng đã chọn không có mã dự án',
       'loadMore': 'Tải thêm',
       'shareIssueLink': 'Chia sẻ liên kết',
@@ -468,6 +480,8 @@ class AppLocalizations {
   String get active => _s('active');
   String get updateSprint => _s('updateSprint');
   String get deleteSprint => _s('deleteSprint');
+  String get completeSprint => _s('completeSprint');
+  String get startSprint => _s('startSprint');
   String get start => _s('start');
   String get end => _s('end');
   String get retryLoading => _s('retryLoading');
@@ -479,6 +493,8 @@ class AppLocalizations {
   String get sprintCreatedSuccess => _s('sprintCreatedSuccess');
   String get sprintUpdated => _s('sprintUpdated');
   String get sprintDeleted => _s('sprintDeleted');
+  String get sprintCompleted => _s('sprintCompleted');
+  String get sprintStarted => _s('sprintStarted');
   String get selectedBoardNoProjectKey => _s('selectedBoardNoProjectKey');
   String get loadMore => _s('loadMore');
   String get shareIssueLink => _s('shareIssueLink');
@@ -635,6 +651,10 @@ class AppLocalizations {
       (_strings['failedToDeleteSprint'] ?? _localizedValues['en']!['failedToDeleteSprint']!).replaceAll('%s', msg);
   String errorDeletingSprint(String msg) =>
       (_strings['errorDeletingSprint'] ?? _localizedValues['en']!['errorDeletingSprint']!).replaceAll('%s', msg);
+  String errorCompletingSprint(String msg) =>
+      (_strings['errorCompletingSprint'] ?? _localizedValues['en']!['errorCompletingSprint']!).replaceAll('%s', msg);
+  String errorStartingSprint(String msg) =>
+      (_strings['errorStartingSprint'] ?? _localizedValues['en']!['errorStartingSprint']!).replaceAll('%s', msg);
   String failedToSave(String msg) =>
       (_strings['failedToSave'] ?? _localizedValues['en']!['failedToSave']!).replaceAll('%s', msg);
 

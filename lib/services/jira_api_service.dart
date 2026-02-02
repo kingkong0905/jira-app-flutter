@@ -1033,6 +1033,19 @@ class JiraApiService {
     clearCache();
   }
 
+  /// Start a future sprint (set state to active). Sprint must be in 'future' and have startDate/endDate.
+  Future<void> startSprint(int sprintId) async {
+    final r = await http
+        .post(
+          Uri.parse('$_baseUrl/rest/agile/1.0/sprint/$sprintId'),
+          headers: _headers,
+          body: jsonEncode({'state': 'active'}),
+        )
+        .timeout(_timeout);
+    if (r.statusCode != 200) throw JiraApiException(r.statusCode, r.body);
+    clearCache();
+  }
+
   /// Update sprint. PUT /rest/agile/1.0/sprint/{sprintId}
   Future<String?> updateSprint({
     required int sprintId,

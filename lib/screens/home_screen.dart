@@ -1305,7 +1305,10 @@ class _HomeScreenState extends State<HomeScreen> {
             final group = _groupedBySprint[idx];
             final isBacklog = group.sprintId == null;
             final isActiveSprint = _activeSprint != null && group.sprintId == _activeSprint!.id;
-            
+            final isFirstUpcomingSprint = !isBacklog &&
+                group.sprintId != null &&
+                ((_activeSprint != null && idx == 1) || (_activeSprint == null && idx == 0));
+
             // Calculate stats
             final doneCount = group.issues.where((i) => i.fields.status.statusCategory.key == 'done').length;
             final inProgressCount = group.issues.where((i) => i.fields.status.statusCategory.key == 'indeterminate').length;
@@ -1385,13 +1388,39 @@ class _HomeScreenState extends State<HomeScreen> {
                                       padding: EdgeInsets.zero,
                                       icon: Icon(Icons.more_vert, size: 20, color: colorScheme.onSurfaceVariant),
                                       onSelected: (value) {
-                                        if (value == 'update') {
+                                        if (value == 'complete') {
+                                          _completeSprint(group.sprintId!, group.sprint);
+                                        } else if (value == 'start') {
+                                          _startSprint(group.sprintId!, group.sprint);
+                                        } else if (value == 'update') {
                                           _openUpdateSprint(group.sprintId!, group.sprint);
                                         } else if (value == 'delete') {
                                           _confirmDeleteSprint(group.sprintId!, group.sprint);
                                         }
                                       },
                                       itemBuilder: (context) => [
+                                        if (isActiveSprint)
+                                          PopupMenuItem(
+                                            value: 'complete',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.check_circle_outline, size: 20, color: colorScheme.primary),
+                                                const SizedBox(width: 8),
+                                                Text(AppLocalizations.of(context).completeSprint),
+                                              ],
+                                            ),
+                                          ),
+                                        if (isFirstUpcomingSprint)
+                                          PopupMenuItem(
+                                            value: 'start',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.play_arrow, size: 20, color: colorScheme.primary),
+                                                const SizedBox(width: 8),
+                                                Text(AppLocalizations.of(context).startSprint),
+                                              ],
+                                            ),
+                                          ),
                                         PopupMenuItem(
                                           value: 'update',
                                           child: Row(
@@ -1735,6 +1764,40 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       _showSnack(AppLocalizations.of(context).errorDeletingSprint(e.toString()), isError: true);
+    }
+  }
+
+  Future<void> _completeSprint(int sprintId, String sprintName) async {
+    try {
+      final api = context.read<JiraApiService>();
+      await api.completeSprint(sprintId);
+      if (mounted) {
+        _showSnack(AppLocalizations.of(context).sprintCompleted);
+        if (_selectedBoard != null) {
+          await _loadIssuesForBoard(_selectedBoard!.id, targetTab: 1);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack(AppLocalizations.of(context).errorCompletingSprint(e.toString()), isError: true);
+      }
+    }
+  }
+
+  Future<void> _startSprint(int sprintId, String sprintName) async {
+    try {
+      final api = context.read<JiraApiService>();
+      await api.startSprint(sprintId);
+      if (mounted) {
+        _showSnack(AppLocalizations.of(context).sprintStarted);
+        if (_selectedBoard != null) {
+          await _loadIssuesForBoard(_selectedBoard!.id, targetTab: 1);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack(AppLocalizations.of(context).errorStartingSprint(e.toString()), isError: true);
+      }
     }
   }
 
