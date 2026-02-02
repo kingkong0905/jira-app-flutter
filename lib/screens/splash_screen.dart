@@ -69,6 +69,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     try {
       final storage = context.read<StorageService>();
       final api = context.read<JiraApiService>();
+      // Clear all caches when app starts
+      api.clearCache();
       final configured = await storage.isConfigured();
       if (configured) {
         final config = await storage.getConfig();

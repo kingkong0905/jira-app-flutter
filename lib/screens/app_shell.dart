@@ -43,6 +43,8 @@ class _AppShellState extends State<AppShell> {
   Future<void> _checkConfiguration() async {
     final storage = context.read<StorageService>();
     final api = context.read<JiraApiService>();
+    // Clear all caches when app starts
+    api.clearCache();
     try {
       final configured = await storage.isConfigured();
       if (configured) {
