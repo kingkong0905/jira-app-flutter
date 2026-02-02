@@ -1759,37 +1759,41 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     return _modalSheet(
       title: 'Status',
       onClose: () => setState(() => _showStatusPicker = false),
+      wrapInScrollView: false,
       child: _loadingTransitions
           ? Center(child: Padding(padding: const EdgeInsets.all(24), child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)))
           : _transitions.isEmpty
               ? Padding(padding: const EdgeInsets.all(24), child: Text('No transitions available', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
-              : ListView(
-                  shrinkWrap: true,
-                  children: _transitions.map((t) {
-                    final id = t['id']?.toString() ?? '';
-                    final name = t['name']?.toString() ?? id;
-                    final to = t['to'];
-                    final toName = to is Map ? (to['name']?.toString() ?? '') : '';
-                    final isTransitioning = _transitioningStatusId == id;
-                    return ListTile(
-                      title: Text(name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
-                      subtitle: toName.isNotEmpty ? Text('→ $toName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)) : null,
-                      onTap: () async {
-                        setState(() => _transitioningStatusId = id);
-                        final err = await context.read<JiraApiService>().transitionIssue(widget.issueKey, id);
-                        if (mounted) {
-                          setState(() { _transitioningStatusId = null; _showStatusPicker = false; });
-                          if (err == null) {
-                            await _refreshIssue();
-                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status updated')));
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+              : ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+                  child: ListView(
+                    shrinkWrap: false,
+                    children: _transitions.map((t) {
+                      final id = t['id']?.toString() ?? '';
+                      final name = t['name']?.toString() ?? id;
+                      final to = t['to'];
+                      final toName = to is Map ? (to['name']?.toString() ?? '') : '';
+                      final isTransitioning = _transitioningStatusId == id;
+                      return ListTile(
+                        title: Text(name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                        subtitle: toName.isNotEmpty ? Text('→ $toName', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)) : null,
+                        onTap: () async {
+                          setState(() => _transitioningStatusId = id);
+                          final err = await context.read<JiraApiService>().transitionIssue(widget.issueKey, id);
+                          if (mounted) {
+                            setState(() { _transitioningStatusId = null; _showStatusPicker = false; });
+                            if (err == null) {
+                              await _refreshIssue();
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Status updated')));
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+                            }
                           }
-                        }
-                      },
-                      trailing: isTransitioning ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
-                    );
-                  }).toList(),
+                        },
+                        trailing: isTransitioning ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                      );
+                    }).toList(),
+                  ),
                 ),
     );
   }
@@ -1798,33 +1802,37 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     return _modalSheet(
       title: 'Priority',
       onClose: () => setState(() => _showPriorityPicker = false),
+      wrapInScrollView: false,
       child: _loadingPriorities
           ? Center(child: Padding(padding: const EdgeInsets.all(24), child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)))
-          : ListView(
-              shrinkWrap: true,
-              children: _priorities.map((p) {
-                final id = p['id']?.toString() ?? '';
-                final name = p['name']?.toString() ?? 'Unknown';
-                final isUpdating = _updatingPriorityId == id;
-                return ListTile(
-                  leading: Text(_getPriorityEmoji(name), style: const TextStyle(fontSize: 20)),
-                  title: Text(name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
-                  onTap: () async {
-                    setState(() => _updatingPriorityId = id);
-                    final err = await context.read<JiraApiService>().updateIssueField(widget.issueKey, {'priority': {'id': id.toString()}});
-                    if (mounted) {
-                      setState(() { _updatingPriorityId = null; _showPriorityPicker = false; });
-                      if (err == null) {
-                        await _refreshIssue();
-                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Priority updated')));
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+          : ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
+              child: ListView(
+                shrinkWrap: false,
+                children: _priorities.map((p) {
+                  final id = p['id']?.toString() ?? '';
+                  final name = p['name']?.toString() ?? 'Unknown';
+                  final isUpdating = _updatingPriorityId == id;
+                  return ListTile(
+                    leading: Text(_getPriorityEmoji(name), style: const TextStyle(fontSize: 20)),
+                    title: Text(name, style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                    onTap: () async {
+                      setState(() => _updatingPriorityId = id);
+                      final err = await context.read<JiraApiService>().updateIssueField(widget.issueKey, {'priority': {'id': id.toString()}});
+                      if (mounted) {
+                        setState(() { _updatingPriorityId = null; _showPriorityPicker = false; });
+                        if (err == null) {
+                          await _refreshIssue();
+                          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Priority updated')));
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+                        }
                       }
-                    }
-                  },
-                  trailing: isUpdating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
-                );
-              }).toList(),
+                    },
+                    trailing: isUpdating ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : null,
+                  );
+                }).toList(),
+              ),
             ),
     );
   }
@@ -1939,7 +1947,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     );
   }
 
-  Widget _modalSheet({required String title, required VoidCallback onClose, required Widget child}) {
+  Widget _modalSheet({required String title, required VoidCallback onClose, required Widget child, bool wrapInScrollView = true}) {
     final colorScheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onClose,
@@ -1969,7 +1977,7 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                     ],
                   ),
                 ),
-                Flexible(child: SingleChildScrollView(child: child)),
+                Flexible(child: wrapInScrollView ? SingleChildScrollView(child: child) : child),
               ],
             ),
           ),
