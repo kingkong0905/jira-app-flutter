@@ -179,6 +179,9 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   // Pull Requests (GitHub – from remote links and dev-status API)
   List<JiraRemoteLink> _pullRequestLinks = [];
   List<JiraDevelopmentPullRequest> _devPullRequests = [];
+  List<JiraDevelopmentBranch> _devBranches = [];
+  List<JiraDevelopmentCommit> _devCommits = [];
+  String _selectedDevTab = 'pullRequests'; // branches, commits, pullRequests
   // Epic children (when issue is Epic)
   List<JiraIssue> _epicChildren = [];
   bool _loadingEpicChildren = false;
@@ -186,6 +189,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   String? _sentryUrl;
   bool _sentryConfigured = false;
   bool _loadingSentryDetail = false;
+  // Issue linking
+  bool _loadingLinkTypes = false;
+  List<JiraIssueLinkType> _linkTypes = [];
+  String? _deletingIssueLinkId;
 
   @override
   void initState() {
@@ -471,9 +478,17 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         _confluenceLinks = list.where((l) => l.isConfluence).toList();
         _pullRequestLinks = list.where((l) => l.isGitHubPullRequest).toList();
       });
-      // Load dev-status PRs (GitHub/Bitbucket for Jira) using issue key (Data Center/Server)
-      final devPrs = await api.getDevelopmentPullRequests(widget.issueKey);
-      if (mounted) setState(() => _devPullRequests = devPrs);
+      // Load dev-status info (branches, commits, PRs) using issue ID for comprehensive GitHub integration
+      if (_issue != null) {
+        final devInfo = await api.getDevelopmentInfo(_issue!.id);
+        if (mounted) {
+          setState(() {
+            _devBranches = devInfo.branches;
+            _devCommits = devInfo.commits;
+            _devPullRequests = devInfo.pullRequests;
+          });
+        }
+      }
       if (mounted) setState(() => _loadingConfluenceLinks = false);
     } catch (_) {
       if (mounted) setState(() => _loadingConfluenceLinks = false);
@@ -655,12 +670,10 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
                             const SizedBox(height: 8),
                             _buildEpicChildrenSection(),
                           ],
-                          if ((_issue!.fields.issuelinks ?? []).isNotEmpty) ...[
-                            const SizedBox(height: 24),
-                            Text(AppLocalizations.of(context).linkedWorkItems, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
-                            const SizedBox(height: 8),
-                            _buildLinkedWorkItemsSection(),
-                          ],
+                          const SizedBox(height: 24),
+                          Text(AppLocalizations.of(context).linkedWorkItems, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
+                          const SizedBox(height: 8),
+                          _buildLinkedWorkItemsSection(),
                           const SizedBox(height: 24),
                           _buildDevelopmentSection(),
                           const SizedBox(height: 24),
@@ -2337,83 +2350,102 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
   Widget _buildLinkedWorkItemsSection() {
     final colorScheme = Theme.of(context).colorScheme;
     final links = _issue?.fields.issuelinks ?? [];
-    if (links.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
-      );
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: links.map((link) {
-        final issue = link.linkedIssue;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Material(
-            color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              onTap: () => _navigateToIssue(issue.key),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
+      children: [
+        if (links.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 12),
+            child: Text(AppLocalizations.of(context).noLinkedWorkItems, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
+          )
+        else
+          ...links.map((link) {
+            final issue = link.linkedIssue;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  onTap: () => _navigateToIssue(issue.key),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colorScheme.outlineVariant),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: colorScheme.outlineVariant),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            link.directionLabel,
-                            style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
-                          ),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                link.directionLabel,
+                                style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(issue.key, style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.primary, fontSize: 13), overflow: TextOverflow.ellipsis),
+                            ),
+                            if (link.id != null)
+                              IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: _deletingIssueLinkId == link.id ? null : () => _confirmRemoveIssueLink(link.id!, issue.key),
+                                color: colorScheme.error,
+                                tooltip: AppLocalizations.of(context).removeIssueLink,
+                                padding: const EdgeInsets.all(4),
+                                constraints: const BoxConstraints(),
+                              ),
+                            Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant, size: 20),
+                          ],
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(issue.key, style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.primary, fontSize: 13), overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 6),
+                        Text(issue.fields.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _statusColor(issue.fields.status.statusCategory.key),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                issue.fields.status.name,
+                                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            if (issue.fields.assignee != null) ...[
+                              const SizedBox(width: 8),
+                              _userTile(issue.fields.assignee!, radius: 10),
+                            ],
+                          ],
                         ),
-                        Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant, size: 20),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    Text(issue.fields.summary, style: TextStyle(fontSize: 13, color: colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _statusColor(issue.fields.status.statusCategory.key),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            issue.fields.status.name,
-                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        if (issue.fields.assignee != null) ...[
-                          const SizedBox(width: 8),
-                          _userTile(issue.fields.assignee!, radius: 10),
-                        ],
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            );
+          }),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _showAddIssueLinkDialog(),
+            icon: Icon(Icons.add_link, size: 18, color: colorScheme.primary),
+            label: Text(AppLocalizations.of(context).linkIssue),
           ),
-        );
-      }).toList(),
+        ),
+      ],
     );
   }
 
@@ -2475,6 +2507,142 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
         child: SizedBox(height: 44, child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary))),
       );
     }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('${AppLocalizations.of(context).development} ${widget.issueKey}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
+        const SizedBox(height: 12),
+        // Tabs
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _buildDevTab(AppLocalizations.of(context).branches, 'branches', _devBranches.isNotEmpty),
+              _buildDevTab(AppLocalizations.of(context).commits, 'commits', _devCommits.isNotEmpty),
+              _buildDevTab(AppLocalizations.of(context).pullRequests, 'pullRequests', _buildPullRequestRows().isNotEmpty),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Content based on selected tab
+        if (_selectedDevTab == 'branches')
+          _buildBranchesContent(colorScheme)
+        else if (_selectedDevTab == 'commits')
+          _buildCommitsContent(colorScheme)
+        else
+          _buildPullRequestsContent(colorScheme),
+      ],
+    );
+  }
+
+  Widget _buildBranchesContent(ColorScheme colorScheme) {
+    if (_devBranches.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('No branches linked', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _devBranches.map((branch) {
+        return Material(
+          color: colorScheme.surface,
+          child: InkWell(
+            onTap: () => url_launcher.launchUrl(Uri.parse(branch.url), mode: url_launcher.LaunchMode.externalApplication),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.account_tree, size: 16, color: colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      branch.name,
+                      style: TextStyle(fontSize: 13, color: colorScheme.primary, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (branch.repositoryName != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      branch.repositoryName!,
+                      style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCommitsContent(ColorScheme colorScheme) {
+    if (_devCommits.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('No commits linked', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: _devCommits.map((commit) {
+        return Material(
+          color: colorScheme.surface,
+          child: InkWell(
+            onTap: () => url_launcher.launchUrl(Uri.parse(commit.url), mode: url_launcher.LaunchMode.externalApplication),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
+              ),
+              child: Row(
+                children: [
+                  if (commit.authorAvatarUrl != null)
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundImage: NetworkImage(commit.authorAvatarUrl!),
+                    )
+                  else
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: colorScheme.primaryContainer,
+                      child: Icon(Icons.person, size: 14, color: colorScheme.onPrimaryContainer),
+                    ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          commit.message ?? commit.id.substring(0, 7),
+                          style: TextStyle(fontSize: 13, color: colorScheme.onSurface),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${commit.authorName ?? 'Unknown'} • ${commit.id.substring(0, 7)}',
+                          style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildPullRequestsContent(ColorScheme colorScheme) {
     final rows = _buildPullRequestRows();
     final repoName = rows.isNotEmpty
         ? (rows.first.repositoryName != null ? '${rows.first.repositoryName} (GitHub)' : 'GitHub')
@@ -2483,22 +2651,6 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('${AppLocalizations.of(context).development} ${widget.issueKey}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
-        const SizedBox(height: 12),
-        // Tabs: Pull requests selected
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildDevTab(AppLocalizations.of(context).branches, false),
-              _buildDevTab(AppLocalizations.of(context).commits, false),
-              _buildDevTab(AppLocalizations.of(context).pullRequests, true),
-              _buildDevTab(AppLocalizations.of(context).builds, false),
-              _buildDevTab(AppLocalizations.of(context).deployments, false),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
         if (repoName != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -2546,23 +2698,69 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     );
   }
 
-  Widget _buildDevTab(String label, bool selected) {
+  Widget _buildDevTab(String label, String tabKey, bool hasContent) {
     final colorScheme = Theme.of(context).colorScheme;
+    final selected = _selectedDevTab == tabKey;
     return Padding(
       padding: const EdgeInsets.only(right: 4),
       child: Material(
         color: selected ? colorScheme.primaryContainer : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         child: InkWell(
-          onTap: () {},
+          onTap: hasContent ? () {
+            setState(() {
+              _selectedDevTab = tabKey;
+            });
+          } : null,
           borderRadius: BorderRadius.circular(6),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(label, style: TextStyle(fontSize: 13, fontWeight: selected ? FontWeight.w600 : FontWeight.normal, color: selected ? colorScheme.onPrimaryContainer : colorScheme.onSurface)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                    color: hasContent
+                        ? (selected ? colorScheme.onPrimaryContainer : colorScheme.onSurface)
+                        : colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (hasContent && !selected) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _getTabCount(tabKey).toString(),
+                      style: TextStyle(fontSize: 10, color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  int _getTabCount(String tabKey) {
+    switch (tabKey) {
+      case 'branches':
+        return _devBranches.length;
+      case 'commits':
+        return _devCommits.length;
+      case 'pullRequests':
+        return _buildPullRequestRows().length;
+      default:
+        return 0;
+    }
   }
 
   Widget _buildPullRequestTableRow(PullRequestRow row, ColorScheme colorScheme) {
@@ -2848,6 +3046,220 @@ class _IssueDetailScreenState extends State<IssueDetailScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(AppLocalizations.of(context).confluenceLinkRemoved)));
       _loadConfluenceLinks();
+    }
+  }
+
+  Future<void> _showAddIssueLinkDialog() async {
+    final issueKeyController = TextEditingController();
+    final commentController = TextEditingController();
+    String? selectedLinkTypeName;
+    bool showCommentField = false;
+
+    // Load link types if not already loaded
+    if (_linkTypes.isEmpty) {
+      setState(() => _loadingLinkTypes = true);
+      final api = context.read<JiraApiService>();
+      _linkTypes = await api.getIssueLinkTypes();
+      if (mounted) setState(() => _loadingLinkTypes = false);
+    }
+
+    if (_linkTypes.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).noLinkTypesAvailable)),
+      );
+      return;
+    }
+
+    final screenContext = context;
+    final linked = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final colorScheme = Theme.of(ctx).colorScheme;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              backgroundColor: colorScheme.surface,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(AppLocalizations.of(ctx).addIssueLink, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: colorScheme.onSurface)),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        decoration: InputDecoration(
+                          labelText: AppLocalizations.of(ctx).linkType,
+                          border: const OutlineInputBorder(),
+                        ),
+                        value: selectedLinkTypeName,
+                        hint: Text(AppLocalizations.of(ctx).selectLinkType),
+                        items: _linkTypes.map((linkType) {
+                          return DropdownMenuItem<String>(
+                            value: linkType.name,
+                            child: Text('${linkType.name} (${linkType.inward} ← → ${linkType.outward})'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedLinkTypeName = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: issueKeyController,
+                        decoration: InputDecoration(
+                          labelText: AppLocalizations.of(ctx).issueKey,
+                          hintText: AppLocalizations.of(ctx).issueKeyHint,
+                          border: const OutlineInputBorder(),
+                        ),
+                        maxLines: 1,
+                        textCapitalization: TextCapitalization.characters,
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () {
+                          setDialogState(() {
+                            showCommentField = !showCommentField;
+                          });
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            children: [
+                              Icon(showCommentField ? Icons.expand_less : Icons.expand_more, color: colorScheme.primary, size: 20),
+                              const SizedBox(width: 8),
+                              Text(AppLocalizations.of(ctx).addComment, style: TextStyle(color: colorScheme.primary, fontSize: 14)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (showCommentField) ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: commentController,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 3,
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: Text(AppLocalizations.of(ctx).cancel),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: () async {
+                              final issueKey = issueKeyController.text.trim().toUpperCase();
+
+                              // Validate issue key
+                              if (issueKey.isEmpty || !issueKey.contains('-')) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(AppLocalizations.of(ctx).issueKeyRequired)),
+                                );
+                                return;
+                              }
+
+                              // Check if trying to link to self
+                              if (issueKey == widget.issueKey.toUpperCase()) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(AppLocalizations.of(ctx).cannotLinkToSelf)),
+                                );
+                                return;
+                              }
+
+                              // Validate link type selected
+                              if (selectedLinkTypeName == null) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(AppLocalizations.of(ctx).selectLinkType)),
+                                );
+                                return;
+                              }
+
+                              final api = screenContext.read<JiraApiService>();
+                              final comment = commentController.text.trim();
+                              final err = await api.linkIssues(
+                                linkTypeName: selectedLinkTypeName!,
+                                inwardIssueKey: issueKey,
+                                outwardIssueKey: widget.issueKey,
+                                commentText: comment.isNotEmpty ? comment : null,
+                              );
+
+                              if (!ctx.mounted) return;
+                              if (err != null) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(AppLocalizations.of(ctx).issueLinkFailed(err))),
+                                );
+                              } else {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(content: Text(AppLocalizations.of(ctx).issueLinkAdded)),
+                                );
+                                Navigator.of(ctx).pop(true);
+                              }
+                            },
+                            child: Text(AppLocalizations.of(ctx).linkIssue),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (linked == true && mounted) await _refreshIssue();
+  }
+
+  Future<void> _confirmRemoveIssueLink(String linkId, String linkedIssueKey) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(AppLocalizations.of(ctx).removeIssueLink),
+        content: Text(AppLocalizations.of(ctx).removeIssueLinkConfirm(linkedIssueKey)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(AppLocalizations.of(ctx).cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(ctx).colorScheme.error),
+            child: Text(AppLocalizations.of(ctx).delete),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    _deleteIssueLink(linkId);
+  }
+
+  Future<void> _deleteIssueLink(String linkId) async {
+    setState(() => _deletingIssueLinkId = linkId);
+    final api = context.read<JiraApiService>();
+    final err = await api.deleteIssueLink(linkId);
+    if (!mounted) return;
+    setState(() => _deletingIssueLinkId = null);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).issueLinkRemoveFailed(err))),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).issueLinkRemoved)),
+      );
+      await _refreshIssue();
     }
   }
 

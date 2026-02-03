@@ -24,6 +24,8 @@ class JiraApiService {
   static const String _endpointApplinks = '/rest/applinks/3.0/applinks';
   static const String _endpointWikiPage = '/wiki/pages/viewpage.action';
   static const String _endpointDevStatusDetail = '/rest/dev-status/1.0/issue/detail';
+  static const String _endpointApi3IssueLink = '/rest/api/3/issueLink';
+  static const String _endpointApi3IssueLinkType = '/rest/api/3/issueLinkType';
 
   // Query Parameters
   static const String _paramStartAt = 'startAt';
@@ -770,45 +772,106 @@ class JiraApiService {
     }
   }
 
-  /// Get pull requests linked to an issue via dev-status REST API.
-  /// Uses 1.0 endpoint for Bitbucket (stash); other application types use same path with their applicationType.
-  Future<List<JiraDevelopmentPullRequest>> getDevelopmentPullRequests(String issueKey) async {
-    if (issueKey.isEmpty) return [];
-    final results = <JiraDevelopmentPullRequest>[];
-    final seenUrls = <String>{};
+  /// Get development information (branches, commits, pull requests) linked to an issue via dev-status REST API.
+  /// Uses issueId (numeric ID) with dataType=repository for comprehensive GitHub integration.
+  Future<JiraDevelopmentInfo> getDevelopmentInfo(String issueId) async {
+    if (issueId.isEmpty) {
+      return JiraDevelopmentInfo(branches: [], commits: [], pullRequests: []);
+    }
 
-    for (final applicationType in ['stash', 'github']) {
+    final branches = <JiraDevelopmentBranch>[];
+    final commits = <JiraDevelopmentCommit>[];
+    final pullRequests = <JiraDevelopmentPullRequest>[];
+    final seenBranchUrls = <String>{};
+    final seenCommitUrls = <String>{};
+    final seenPrUrls = <String>{};
+
+    for (final applicationType in ['github', 'stash']) {
       try {
         final uri = Uri.parse('$_baseUrl$_endpointDevStatusDetail').replace(
           queryParameters: {
-            'issueKey': issueKey,
+            'issueId': issueId,
             'applicationType': applicationType,
-            'dataType': 'pullrequest',
+            'dataType': 'repository',
           },
         );
         final r = await http.get(uri, headers: _headers).timeout(_timeout);
         if (r.statusCode != HttpConstants.statusOk) continue;
+
         final body = jsonDecode(r.body);
         if (body is! Map) continue;
         final detail = body['detail'];
         if (detail is! List) continue;
-        for (final e in detail) {
-          if (e is! Map) continue;
-          final pr = e['pullRequest'] ?? e;
-          if (pr is Map<String, dynamic>) {
-            try {
-              final parsed = JiraDevelopmentPullRequest.fromJson(pr);
-              if (parsed.url.isNotEmpty && seenUrls.add(parsed.url)) {
-                results.add(parsed);
+
+        for (final repo in detail) {
+          if (repo is! Map) continue;
+
+          // Parse branches
+          final branchesData = repo['branches'] as List?;
+          if (branchesData != null) {
+            for (final branchJson in branchesData) {
+              if (branchJson is Map<String, dynamic>) {
+                try {
+                  final branch = JiraDevelopmentBranch.fromJson(branchJson);
+                  if (branch.url.isNotEmpty && seenBranchUrls.add(branch.url)) {
+                    branches.add(branch);
+                  }
+                } catch (_) {}
               }
-            } catch (_) {}
+            }
+          }
+
+          // Parse commits
+          final commitsData = repo['commits'] as List?;
+          if (commitsData != null) {
+            for (final commitJson in commitsData) {
+              if (commitJson is Map<String, dynamic>) {
+                try {
+                  final commit = JiraDevelopmentCommit.fromJson(commitJson);
+                  if (commit.url.isNotEmpty && seenCommitUrls.add(commit.url)) {
+                    commits.add(commit);
+                  }
+                } catch (_) {}
+              }
+            }
+          }
+
+          // Parse pull requests
+          final prsData = repo['pullRequests'] as List?;
+          if (prsData != null) {
+            for (final prJson in prsData) {
+              if (prJson is Map<String, dynamic>) {
+                try {
+                  final pr = JiraDevelopmentPullRequest.fromJson(prJson);
+                  if (pr.url.isNotEmpty && seenPrUrls.add(pr.url)) {
+                    pullRequests.add(pr);
+                  }
+                } catch (_) {}
+              }
+            }
           }
         }
-      } catch (_) {
+      } catch (e) {
+        print('[JiraAPI] getDevelopmentInfo error for $applicationType: $e');
         // One integration may fail; continue with the other
       }
     }
-    return results;
+
+    return JiraDevelopmentInfo(
+      branches: branches,
+      commits: commits,
+      pullRequests: pullRequests,
+    );
+  }
+
+  /// Legacy method for backward compatibility. Use getDevelopmentInfo instead.
+  @Deprecated('Use getDevelopmentInfo instead')
+  Future<List<JiraDevelopmentPullRequest>> getDevelopmentPullRequests(String issueKey) async {
+    // For backward compatibility, fetch issue details to get the ID
+    final issue = await getIssueDetails(issueKey);
+    if (issue == null) return [];
+    final devInfo = await getDevelopmentInfo(issue.id);
+    return devInfo.pullRequests;
   }
 
   /// Try to get Confluence application id from applinks (for creating Confluence remote link).
@@ -893,6 +956,90 @@ class JiraApiService {
       ).timeout(_timeout);
       if (r.statusCode == HttpConstants.statusNoContent || r.statusCode == HttpConstants.statusOk) {
         _clearIssueCache(issueKey);
+        return null;
+      }
+      return r.body;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Get available issue link types from Jira. GET /rest/api/3/issueLinkType.
+  Future<List<JiraIssueLinkType>> getIssueLinkTypes() async {
+    final key = _cacheKey(_endpointApi3IssueLinkType, {});
+    final cached = _getFromCache<List<JiraIssueLinkType>>(key, _cacheDurationMs);
+    if (cached != null) return cached;
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl$_endpointApi3IssueLinkType'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode == HttpConstants.statusOk) {
+        final json = jsonDecode(r.body);
+        final linkTypes = JiraIssueLinkType.fromJsonList(json['issueLinkTypes']);
+        _setCache(key, linkTypes);
+        return linkTypes;
+      }
+    } catch (e) {
+      print('[JiraAPI] getIssueLinkTypes error: $e');
+    }
+    return [];
+  }
+
+  /// Create an issue link between two issues. POST /rest/api/3/issueLink.
+  Future<String?> linkIssues({
+    required String linkTypeName,
+    required String inwardIssueKey,
+    required String outwardIssueKey,
+    String? commentText,
+  }) async {
+    try {
+      final body = <String, dynamic>{
+        'type': {'name': linkTypeName},
+        'inwardIssue': {'key': inwardIssueKey},
+        'outwardIssue': {'key': outwardIssueKey},
+      };
+      if (commentText != null && commentText.isNotEmpty) {
+        body['comment'] = {'body': commentText};
+      }
+      final r = await http.post(
+        Uri.parse('$_baseUrl$_endpointApi3IssueLink'),
+        headers: _headers,
+        body: jsonEncode(body),
+      ).timeout(_timeout);
+      if (r.statusCode == HttpConstants.statusOk || r.statusCode == HttpConstants.statusCreated) {
+        _clearIssueCache(inwardIssueKey);
+        _clearIssueCache(outwardIssueKey);
+        return null;
+      }
+      // Try to parse error messages from response
+      try {
+        final errorJson = jsonDecode(r.body) as Map<String, dynamic>;
+        final errorMessages = errorJson['errorMessages'] as List<dynamic>?;
+        if (errorMessages != null && errorMessages.isNotEmpty) {
+          return errorMessages.join(', ');
+        }
+        final errors = errorJson['errors'] as Map<String, dynamic>?;
+        if (errors != null && errors.isNotEmpty) {
+          return errors.values.join(', ');
+        }
+      } catch (_) {}
+      return r.body;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  /// Delete an issue link. DELETE /rest/api/3/issueLink/{linkId}.
+  Future<String?> deleteIssueLink(String linkId) async {
+    try {
+      final r = await http.delete(
+        Uri.parse('$_baseUrl$_endpointApi3IssueLink/$linkId'),
+        headers: _headers,
+      ).timeout(_timeout);
+      if (r.statusCode == HttpConstants.statusNoContent || r.statusCode == HttpConstants.statusOk) {
+        // Clear all issue caches since we can't determine affected issues from linkId
+        _cache.removeWhere((key, _) => key.contains(_endpointApi3Issue));
         return null;
       }
       return r.body;

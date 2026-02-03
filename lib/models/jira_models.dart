@@ -447,18 +447,21 @@ class BoardAssignee {
 
 /// Issue link (linked work item) from Jira API. GET issue with fields=issuelinks.
 class JiraIssueLink {
+  final String? id;
   final String linkTypeName;
   /// Direction label from type (e.g. "is blocked by", "blocks").
   final String directionLabel;
   final JiraIssue linkedIssue;
 
   JiraIssueLink({
+    this.id,
     required this.linkTypeName,
     required this.directionLabel,
     required this.linkedIssue,
   });
 
   factory JiraIssueLink.fromJson(Map<String, dynamic> json) {
+    final id = stringFromJson(json['id']);
     final type = json['type'] as Map<String, dynamic>?;
     final typeName = type != null ? (stringFromJson(type['name']) ?? '') : '';
     final inward = type != null ? (stringFromJson(type['inward']) ?? '') : '';
@@ -474,7 +477,7 @@ class JiraIssueLink {
     } else {
       throw ArgumentError('Issue link must have inwardIssue or outwardIssue');
     }
-    return JiraIssueLink(linkTypeName: typeName, directionLabel: directionLabel, linkedIssue: issue);
+    return JiraIssueLink(id: id, linkTypeName: typeName, directionLabel: directionLabel, linkedIssue: issue);
   }
 
   static List<JiraIssueLink>? fromJsonList(dynamic v) {
@@ -489,6 +492,44 @@ class JiraIssueLink {
       }
     }
     return list.isEmpty ? null : list;
+  }
+}
+
+/// Issue link type from Jira API. GET /rest/api/3/issueLinkType.
+class JiraIssueLinkType {
+  final String id;
+  final String name;
+  final String inward;
+  final String outward;
+
+  JiraIssueLinkType({
+    required this.id,
+    required this.name,
+    required this.inward,
+    required this.outward,
+  });
+
+  factory JiraIssueLinkType.fromJson(Map<String, dynamic> json) {
+    return JiraIssueLinkType(
+      id: stringFromJson(json['id']) ?? '',
+      name: stringFromJson(json['name']) ?? '',
+      inward: stringFromJson(json['inward']) ?? '',
+      outward: stringFromJson(json['outward']) ?? '',
+    );
+  }
+
+  static List<JiraIssueLinkType> fromJsonList(dynamic v) {
+    if (v == null) return [];
+    if (v is! List) return [];
+    final list = <JiraIssueLinkType>[];
+    for (final e in v) {
+      if (e is Map<String, dynamic>) {
+        try {
+          list.add(JiraIssueLinkType.fromJson(e));
+        } catch (_) {}
+      }
+    }
+    return list;
   }
 }
 
@@ -585,6 +626,79 @@ class JiraDevelopmentPullRequest {
       updated: stringFromJson(json['updated'] ?? json['updatedDate'] ?? json['lastUpdated']),
     );
   }
+}
+
+/// Development branch information from dev-status API.
+class JiraDevelopmentBranch {
+  final String name;
+  final String url;
+  final String? repositoryName;
+  final String? created;
+
+  JiraDevelopmentBranch({
+    required this.name,
+    required this.url,
+    this.repositoryName,
+    this.created,
+  });
+
+  factory JiraDevelopmentBranch.fromJson(Map<String, dynamic> json) {
+    final repo = json['repository'] as Map<String, dynamic>?;
+    return JiraDevelopmentBranch(
+      name: stringFromJson(json['name']) ?? '',
+      url: stringFromJson(json['url']) ?? '',
+      repositoryName: repo != null ? stringFromJson(repo['name'] ?? repo['fullName']) : null,
+      created: stringFromJson(json['created'] ?? json['createDate']),
+    );
+  }
+}
+
+/// Development commit information from dev-status API.
+class JiraDevelopmentCommit {
+  final String id;
+  final String url;
+  final String? message;
+  final String? authorName;
+  final String? authorAvatarUrl;
+  final String? repositoryName;
+  final String? created;
+
+  JiraDevelopmentCommit({
+    required this.id,
+    required this.url,
+    this.message,
+    this.authorName,
+    this.authorAvatarUrl,
+    this.repositoryName,
+    this.created,
+  });
+
+  factory JiraDevelopmentCommit.fromJson(Map<String, dynamic> json) {
+    final author = json['author'] as Map<String, dynamic>?;
+    final repo = json['repository'] as Map<String, dynamic>?;
+    return JiraDevelopmentCommit(
+      id: stringFromJson(json['id']) ?? stringFromJson(json['hash']) ?? '',
+      url: stringFromJson(json['url']) ?? '',
+      message: stringFromJson(json['message'] ?? json['displayId']),
+      authorName: author != null ? stringFromJson(author['name'] ?? author['displayName']) : null,
+      authorAvatarUrl: author != null ? stringFromJson(author['avatar'] ?? author['avatarUrl']) : null,
+      repositoryName: repo != null ? stringFromJson(repo['name'] ?? repo['fullName']) : null,
+      created: stringFromJson(json['created'] ?? json['authorTimestamp']),
+    );
+  }
+}
+
+/// Wrapper for all development information (branches, commits, pull requests).
+class JiraDevelopmentInfo {
+  final List<JiraDevelopmentBranch> branches;
+  final List<JiraDevelopmentCommit> commits;
+  final List<JiraDevelopmentPullRequest> pullRequests;
+
+  JiraDevelopmentInfo({
+    required this.branches,
+    required this.commits,
+    required this.pullRequests,
+  });
 }
 
 /// Unified PR row for the Development panel (from remote links or dev-status).

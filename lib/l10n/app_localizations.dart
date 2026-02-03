@@ -211,6 +211,24 @@ class AppLocalizations {
       'confluenceLinkRemoveFailed': 'Failed to remove link: %s',
       'removeConfluenceLink': 'Remove link',
       'removeConfluenceLinkConfirm': 'Remove this Confluence link from the issue?',
+      // Issue linking
+      'linkIssue': 'Link issue',
+      'addIssueLink': 'Add issue link',
+      'linkType': 'Link type',
+      'issueKeyHint': 'e.g., PROJ-123',
+      'issueKeyRequired': 'Please enter an issue key',
+      'cannotLinkToSelf': 'Cannot link an issue to itself',
+      'selectLinkType': 'Select link type',
+      'thisIssue': 'This issue',
+      'linkedIssue': 'Linked issue',
+      'addComment': 'Add comment (optional)',
+      'issueLinkAdded': 'Issue link created',
+      'issueLinkFailed': 'Failed to link: %s',
+      'removeIssueLink': 'Remove link',
+      'removeIssueLinkConfirm': 'Remove link to %s?',
+      'issueLinkRemoved': 'Link removed',
+      'issueLinkRemoveFailed': 'Failed to remove link: %s',
+      'noLinkTypesAvailable': 'No link types available',
       'management': 'Management',
       'sentry': 'Sentry',
       'sentryLinkHint': 'Paste Sentry issue link (e.g. https://...sentry.io/issues/...)',
@@ -428,6 +446,24 @@ class AppLocalizations {
       'confluenceLinkRemoveFailed': 'Xóa liên kết thất bại: %s',
       'removeConfluenceLink': 'Xóa liên kết',
       'removeConfluenceLinkConfirm': 'Xóa liên kết Confluence này khỏi công việc?',
+      // Issue linking
+      'linkIssue': 'Liên kết vấn đề',
+      'addIssueLink': 'Thêm liên kết',
+      'linkType': 'Loại liên kết',
+      'issueKeyHint': 'vd: PROJ-123',
+      'issueKeyRequired': 'Vui lòng nhập mã vấn đề',
+      'cannotLinkToSelf': 'Không thể liên kết với chính nó',
+      'selectLinkType': 'Chọn loại liên kết',
+      'thisIssue': 'Vấn đề này',
+      'linkedIssue': 'Vấn đề liên kết',
+      'addComment': 'Thêm bình luận (tùy chọn)',
+      'issueLinkAdded': 'Đã tạo liên kết',
+      'issueLinkFailed': 'Tạo liên kết thất bại: %s',
+      'removeIssueLink': 'Xóa liên kết',
+      'removeIssueLinkConfirm': 'Xóa liên kết đến %s?',
+      'issueLinkRemoved': 'Đã xóa liên kết',
+      'issueLinkRemoveFailed': 'Xóa liên kết thất bại: %s',
+      'noLinkTypesAvailable': 'Không có loại liên kết',
       'management': 'Quản lý',
       'sentry': 'Sentry',
       'sentryLinkHint': 'Dán link Sentry (vd: https://...sentry.io/issues/...)',
@@ -647,6 +683,29 @@ class AppLocalizations {
       (_strings['confluenceLinkRemoveFailed'] ?? _localizedValues['en']!['confluenceLinkRemoveFailed']!).replaceAll('%s', msg);
   String get removeConfluenceLink => _s('removeConfluenceLink');
   String get removeConfluenceLinkConfirm => _s('removeConfluenceLinkConfirm');
+
+  // Issue linking
+  String get linkIssue => _s('linkIssue');
+  String get addIssueLink => _s('addIssueLink');
+  String get linkType => _s('linkType');
+  String get issueKeyHint => _s('issueKeyHint');
+  String get issueKeyRequired => _s('issueKeyRequired');
+  String get cannotLinkToSelf => _s('cannotLinkToSelf');
+  String get selectLinkType => _s('selectLinkType');
+  String get thisIssue => _s('thisIssue');
+  String get linkedIssue => _s('linkedIssue');
+  String get addComment => _s('addComment');
+  String get issueLinkAdded => _s('issueLinkAdded');
+  String issueLinkFailed(String error) =>
+      (_strings['issueLinkFailed'] ?? _localizedValues['en']!['issueLinkFailed']!).replaceAll('%s', error);
+  String get removeIssueLink => _s('removeIssueLink');
+  String removeIssueLinkConfirm(String issueKey) =>
+      (_strings['removeIssueLinkConfirm'] ?? _localizedValues['en']!['removeIssueLinkConfirm']!).replaceAll('%s', issueKey);
+  String get issueLinkRemoved => _s('issueLinkRemoved');
+  String issueLinkRemoveFailed(String error) =>
+      (_strings['issueLinkRemoveFailed'] ?? _localizedValues['en']!['issueLinkRemoveFailed']!).replaceAll('%s', error);
+  String get noLinkTypesAvailable => _s('noLinkTypesAvailable');
+
   String get management => _s('management');
   String get sentry => _s('sentry');
   String get sentryLinkHint => _s('sentryLinkHint');
