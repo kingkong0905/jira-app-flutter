@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -125,7 +126,7 @@ class JiraApiService {
   static const _cacheDurationMs = 5 * 60 * 1000; // 5 min
   static const _issuesCacheMs = 60 * 1000; // 1 min for board issues
   static const _issueDetailsCacheMs = 2 * 60 * 1000; // 2 min
-  static const _timeout = Duration(seconds: 25);
+  static const _timeout = Duration(seconds: 45); // Increased from 25s to handle heavy loads
   static const _connectionTestTimeout = Duration(seconds: 30);
 
   /// Set to false to disable connection debug logs (default: true).
@@ -472,7 +473,9 @@ class JiraApiService {
     final cached = _getFromCache<List<BoardAssignee>>(key, _cacheDurationMs);
     if (cached != null) return cached;
 
-    final params = {_paramMaxResults: '1000', _paramFields: _fieldAssignee};
+    // OPTIMIZED: Fetch only 150 issues instead of 1000 to reduce load time
+    // This should be sufficient to get most active assignees
+    final params = {_paramMaxResults: '150', _paramFields: _fieldAssignee};
     final uri = Uri.parse('$_baseUrl$_endpointAgileBoard/$boardId/issue').replace(queryParameters: params);
     final r = await http.get(uri, headers: _headers).timeout(_timeout);
     if (r.statusCode != HttpConstants.statusOk) return [];
@@ -590,6 +593,11 @@ class JiraApiService {
     int sprintId, {
     String? assignee,
   }) async {
+    // Add caching to reduce redundant API calls
+    final cacheKey = _cacheKey('$_endpointAgileBoard/$boardId/sprint/$sprintId/issue', {'assignee': assignee ?? 'all'});
+    final cached = _getFromCache<List<JiraIssue>>(cacheKey, _issuesCacheMs);
+    if (cached != null) return cached;
+
     final results = <JiraIssue>[];
     int startAt = 0;
     const maxResults = 50;
@@ -623,6 +631,9 @@ class JiraApiService {
       if (list.length < maxResults) break;
       startAt += maxResults;
     }
+    
+    // Cache the results
+    _setCache(cacheKey, results);
     return results;
   }
 
@@ -633,6 +644,15 @@ class JiraApiService {
     int maxResults = 50,
     String? assignee,
   }) async {
+    // Add caching to reduce redundant API calls
+    final cacheKey = _cacheKey('$_endpointAgileBoard/$boardId/backlog', {
+      'startAt': startAt,
+      'maxResults': maxResults,
+      'assignee': assignee ?? 'all',
+    });
+    final cached = _getFromCache<({List<JiraIssue> issues, bool hasMore})>(cacheKey, _issuesCacheMs);
+    if (cached != null) return cached;
+
     final params = <String, String>{
       _paramStartAt: '$startAt',
       _paramMaxResults: '$maxResults',
@@ -666,7 +686,11 @@ class JiraApiService {
       }
     }
     final hasMore = list.length >= maxResults;
-    return (issues: issues, hasMore: hasMore);
+    final result = (issues: issues, hasMore: hasMore);
+    
+    // Cache the result
+    _setCache(cacheKey, result);
+    return result;
   }
 
   /// Fetches all backlog issues (paginated). Board backlog = issues not in any sprint.

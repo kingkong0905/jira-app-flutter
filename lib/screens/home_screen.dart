@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -55,6 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _backlogCollapsed = false;
   JiraUser? _currentUser;
   bool _sentryTokenConfigured = false;
+  Timer? _assigneeDebounceTimer;
+  Timer? _boardSearchDebounceTimer;
 
   /// Backlog screen shows User Story, Story, Bug, Task (no Epic, Sub-task, etc.)
   static const _backlogAllowedIssueTypes = {'user story', 'story', 'bug', 'task'};
@@ -67,6 +70,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadInitial();
+  }
+
+  @override
+  void dispose() {
+    _assigneeDebounceTimer?.cancel();
+    _boardSearchDebounceTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadInitial() async {
@@ -164,6 +174,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// [targetTab] when set (e.g. when switching tabs) forces loading for that tab (0=Board, 1=Backlog, 2=Timeline).
+
+  /// Retry helper for operations that might timeout
+  Future<T> _retryOperation<T>(Future<T> Function() operation, {int maxRetries = 2}) async {
+    int attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        return await operation();
+      } catch (e) {
+        attempt++;
+        if (attempt >= maxRetries || !e.toString().contains('Timeout')) {
+          rethrow;
+        }
+        // Wait briefly before retrying (exponential backoff)
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+        debugPrint('Retrying operation (attempt $attempt/$maxRetries) after timeout');
+      }
+    }
+    throw Exception('Max retries exceeded');
+  }
+
   Future<void> _loadIssuesForBoard(int boardId, {int? targetTab}) async {
     final api = context.read<JiraApiService>();
     final tab = targetTab ?? _activeTab;
@@ -173,12 +203,13 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorDismissed = false;
     });
     try {
-      final assigneesData = await api.getBoardAssignees(boardId);
+      // Retry critical operations that might timeout
+      final assigneesData = await _retryOperation(() => api.getBoardAssignees(boardId));
       final board = _boards.where((b) => b.id == boardId).firstOrNull ?? _selectedBoard;
       final isKanban = board?.type.toLowerCase() == 'kanban';
 
       if (!isKanban) {
-        final sprintsData = await api.getSprintsForBoard(boardId);
+        final sprintsData = await _retryOperation(() => api.getSprintsForBoard(boardId));
         setState(() {
           _sprints = sprintsData;
           _activeSprint = sprintsData.where((s) => s.state == 'active').firstOrNull;
@@ -248,24 +279,37 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           }
 
-          // Load all sprint issues for backlog view
+          // OPTIMIZED: Load sprint issues in parallel instead of sequentially
           final allSprintIssues = <JiraIssue>[];
           final issueKeys = <String>{};
-          for (final sprint in _sprints) {
-            try {
-              final sprintIssues = await api.getSprintIssues(
+          
+          // Load only active and future sprints (skip closed sprints for performance)
+          final sprintsToLoad = _sprints.where((s) => s.state == 'active' || s.state == 'future').toList();
+          
+          // Parallel loading with Future.wait
+          final sprintIssueFutures = <Future<List<JiraIssue>>>[];
+          for (final sprint in sprintsToLoad) {
+            sprintIssueFutures.add(
+              api.getSprintIssues(
                 boardId,
                 sprint.id,
                 assignee: assigneeParam,
-              );
-              for (final issue in sprintIssues) {
-                if (!issueKeys.contains(issue.key)) {
-                  issueKeys.add(issue.key);
-                  allSprintIssues.add(issue);
-                }
+              ).catchError((e) {
+                debugPrint('Error loading sprint ${sprint.id}: $e');
+                return <JiraIssue>[];
+              })
+            );
+          }
+          
+          final sprintIssuesResults = await Future.wait(sprintIssueFutures);
+          
+          // Combine results
+          for (final sprintIssues in sprintIssuesResults) {
+            for (final issue in sprintIssues) {
+              if (!issueKeys.contains(issue.key)) {
+                issueKeys.add(issue.key);
+                allSprintIssues.add(issue);
               }
-            } catch (e) {
-              debugPrint('Error loading sprint ${sprint.id}: $e');
             }
           }
 
@@ -976,10 +1020,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         selected: selected,
-        onSelected: (sel) async {
+        onSelected: (sel) {
           if (!sel) return;
           setState(() => _selectedAssignee = value);
-          if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id);
+          
+          // Debounce the API call to prevent rapid reloads
+          _assigneeDebounceTimer?.cancel();
+          _assigneeDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+            if (_selectedBoard != null && mounted) {
+              _loadIssuesForBoard(_selectedBoard!.id);
+            }
+          });
         },
         selectedColor: colorScheme.primary,
         checkmarkColor: colorScheme.onPrimary,
@@ -1533,9 +1584,16 @@ class _HomeScreenState extends State<HomeScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
           child: TextField(
-              onChanged: (v) async {
+              onChanged: (v) {
                 setState(() => _boardSearch = v);
-                await _loadBoards(reset: true);
+
+                // Debounce the board search to prevent rapid reloads
+                _boardSearchDebounceTimer?.cancel();
+                _boardSearchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+                  if (mounted) {
+                    _loadBoards(reset: true);
+                  }
+                });
               },
               decoration: InputDecoration(
                 hintText: AppLocalizations.of(context).searchBoards,
