@@ -45,6 +45,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _issueSearch = '';
   bool _loading = true;
   bool _refreshing = false;
+  bool _loadingBoardData = false;
+  bool _loadingBacklogData = false;
+  bool _loadingTimelineData = false;
   String? _error;
   bool _errorDismissed = false;
   int _boardsStartAt = 0;
@@ -58,6 +61,19 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _sentryTokenConfigured = false;
   Timer? _assigneeDebounceTimer;
   Timer? _boardSearchDebounceTimer;
+  Timer? _issueSearchDebounceTimer;
+
+  // Cached computed values to avoid recalculation on every build
+  List<JiraIssue>? _cachedFilteredIssues;
+  Map<String, List<JiraIssue>>? _cachedGroupedByStatus;
+  Map<String, List<JiraIssue>>? _cachedGroupedByDueDate;
+  List<({String sprint, int? sprintId, List<JiraIssue> issues})>? _cachedGroupedBySprint;
+  String _lastIssueSearchQuery = '';
+  int _lastActiveTab = 0;
+  int _lastIssuesHashCode = 0;
+  int _lastBacklogIssuesHashCode = 0;
+  int? _lastLoadedBoardId;
+  String _lastLoadedAssignee = 'all';
 
   /// Backlog screen shows User Story, Story, Bug, Task (no Epic, Sub-task, etc.)
   static const _backlogAllowedIssueTypes = {'user story', 'story', 'bug', 'task'};
@@ -76,7 +92,33 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _assigneeDebounceTimer?.cancel();
     _boardSearchDebounceTimer?.cancel();
+    _issueSearchDebounceTimer?.cancel();
     super.dispose();
+  }
+
+  /// Invalidate all cached computed values
+  void _invalidateCache() {
+    _cachedFilteredIssues = null;
+    _cachedGroupedByStatus = null;
+    _cachedGroupedByDueDate = null;
+    _cachedGroupedBySprint = null;
+  }
+
+  /// Check if data has changed and invalidate cache if needed
+  void _checkAndInvalidateCache() {
+    final currentIssuesHash = _issues.length.hashCode ^ _issues.fold(0, (hash, issue) => hash ^ issue.key.hashCode);
+    final currentBacklogHash = _backlogIssues.length.hashCode ^ _backlogIssues.fold(0, (hash, issue) => hash ^ issue.key.hashCode);
+
+    if (_lastIssuesHashCode != currentIssuesHash ||
+        _lastBacklogIssuesHashCode != currentBacklogHash ||
+        _lastActiveTab != _activeTab ||
+        _lastIssueSearchQuery != _issueSearch) {
+      _invalidateCache();
+      _lastIssuesHashCode = currentIssuesHash;
+      _lastBacklogIssuesHashCode = currentBacklogHash;
+      _lastActiveTab = _activeTab;
+      _lastIssueSearchQuery = _issueSearch;
+    }
   }
 
   Future<void> _loadInitial() async {
@@ -199,9 +241,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final tab = targetTab ?? _activeTab;
     setState(() {
       _loading = true;
+      if (tab == 0) _loadingBoardData = true;
+      if (tab == 1) _loadingBacklogData = true;
+      if (tab == 2) _loadingTimelineData = true;
       _error = null;
       _errorDismissed = false;
     });
+
+    // Track what we're loading
+    _lastLoadedBoardId = boardId;
+    _lastLoadedAssignee = _selectedAssignee;
     try {
       // Retry critical operations that might timeout
       final assigneesData = await _retryOperation(() => api.getBoardAssignees(boardId));
@@ -225,6 +274,8 @@ class _HomeScreenState extends State<HomeScreen> {
             // Keep previous _backlogIssues so switching back to Backlog shows them until reload
             _assignees = assigneesData;
             _loading = false;
+            _loadingBoardData = false;
+            _loadingTimelineData = false;
           });
           return;
         }
@@ -322,6 +373,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _issues = allSprintIssues;
             _assignees = assigneesData;
             _loading = false;
+            _loadingBacklogData = false;
           });
           return;
         }
@@ -330,6 +382,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _issues = [];
           _assignees = assigneesData;
           _loading = false;
+          _loadingBoardData = false;
+          _loadingTimelineData = false;
         });
         return;
       }
@@ -345,6 +399,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _backlogLoadingMore = false;
         _assignees = assigneesData;
         _loading = false;
+        _loadingBoardData = false;
+        _loadingBacklogData = false;
+        _loadingTimelineData = false;
       });
     } catch (e) {
       setState(() {
@@ -352,6 +409,9 @@ class _HomeScreenState extends State<HomeScreen> {
         _issues = [];
         _backlogIssues = [];
         _loading = false;
+        _loadingBoardData = false;
+        _loadingBacklogData = false;
+        _loadingTimelineData = false;
       });
       _showSnack(AppLocalizations.of(context).failedToLoadIssues, isError: true);
     }
@@ -430,25 +490,47 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<JiraIssue> get _filteredIssues {
+    _checkAndInvalidateCache();
+
+    if (_cachedFilteredIssues != null) {
+      return _cachedFilteredIssues!;
+    }
+
     var list = _displayIssues.where((i) => i.fields.issuetype.name.toLowerCase() != 'epic').toList();
-    if (_issueSearch.trim().isEmpty) return list;
+    if (_issueSearch.trim().isEmpty) {
+      _cachedFilteredIssues = list;
+      return list;
+    }
     final q = _issueSearch.toLowerCase().trim();
-    return list.where((i) {
+    final filtered = list.where((i) {
       return i.key.toLowerCase().contains(q) || i.fields.summary.toLowerCase().contains(q);
     }).toList();
+
+    _cachedFilteredIssues = filtered;
+    return filtered;
   }
 
   Map<String, List<JiraIssue>> get _groupedByStatus {
+    if (_cachedGroupedByStatus != null) {
+      return _cachedGroupedByStatus!;
+    }
+
     final map = <String, List<JiraIssue>>{};
     for (final i in _filteredIssues) {
       final s = i.fields.status.name;
       map.putIfAbsent(s, () => []).add(i);
     }
+
+    _cachedGroupedByStatus = map;
     return map;
   }
 
   /// Timeline groups: Overdue, Today, This week, Next week, Later, No due date
   Map<String, List<JiraIssue>> get _groupedByDueDate {
+    if (_cachedGroupedByDueDate != null) {
+      return _cachedGroupedByDueDate!;
+    }
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final endOfWeek = today.add(const Duration(days: 7));
@@ -488,13 +570,19 @@ class _HomeScreenState extends State<HomeScreen> {
         map['Later']!.add(i);
       }
     }
+
+    _cachedGroupedByDueDate = map;
     return map;
   }
 
   /// Group issues by sprint for Backlog tab (matching React Native logic)
   List<({String sprint, int? sprintId, List<JiraIssue> issues})> get _groupedBySprint {
     if (_activeTab != 1) return [];
-    
+
+    if (_cachedGroupedBySprint != null) {
+      return _cachedGroupedBySprint!;
+    }
+
     final groups = <({String sprint, int? sprintId, List<JiraIssue> issues})>[];
     final addedIssueKeys = <String>{};
     
@@ -591,6 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
       issues: filteredBacklog,
     ));
 
+    _cachedGroupedBySprint = groups;
     return groups;
   }
 
@@ -1012,6 +1101,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
+        key: ValueKey('assignee_chip_$value'),
         label: Text(
           label,
           style: TextStyle(
@@ -1045,8 +1135,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final muted = colorScheme.onSurfaceVariant;
     return InkWell(
       onTap: () async {
+        if (_activeTab == index) return; // Already on this tab, no need to reload
         setState(() => _activeTab = index);
-        if (_selectedBoard != null) await _loadIssuesForBoard(_selectedBoard!.id, targetTab: index);
+
+        // Only reload if board/assignee changed or we don't have data for this tab
+        final needsReload = _selectedBoard == null ||
+            _lastLoadedBoardId != _selectedBoard!.id ||
+            _lastLoadedAssignee != _selectedAssignee ||
+            (index == 0 && _issues.isEmpty) ||
+            (index == 1 && _backlogIssues.isEmpty) ||
+            (index == 2 && _issues.isEmpty);
+
+        if (_selectedBoard != null && needsReload) {
+          await _loadIssuesForBoard(_selectedBoard!.id, targetTab: index);
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1139,7 +1241,12 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Expanded(
             child: TextField(
-              onChanged: (v) => setState(() => _issueSearch = v),
+              onChanged: (v) {
+                _issueSearchDebounceTimer?.cancel();
+                _issueSearchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+                  setState(() => _issueSearch = v);
+                });
+              },
               decoration: InputDecoration(
                 hintText: AppLocalizations.of(context).searchIssues,
                 prefixIcon: const Icon(Icons.search, size: 20),
@@ -1199,14 +1306,210 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_loading) {
       return Center(child: CircularProgressIndicator(color: colorScheme.primary));
     }
-    // Backlog tab shows sprint groups + backlog; empty only when no groups at all
-    final isEmptyForCurrentView = _activeTab == 1
-        ? _groupedBySprint.isEmpty
-        : _filteredIssues.isEmpty;
-    if (isEmptyForCurrentView) {
-      final isBacklog = _activeTab == 1;
-      final isScrum = _selectedBoard != null && _selectedBoard!.type.toLowerCase() != 'kanban';
-      return Center(
+
+    // Use IndexedStack to keep all tabs alive and preserve scroll position
+    return IndexedStack(
+      index: _activeTab,
+      children: [
+        _buildBoardTab(),
+        _buildBacklogTab(),
+        _buildTimelineTab(),
+      ],
+    );
+  }
+
+  Widget _buildBoardTab() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    if (_filteredIssues.isEmpty) {
+      return _buildEmptyState(colorScheme, textTheme, isBacklog: false);
+    }
+
+    if (_selectedBoard!.type.toLowerCase() != 'kanban' && _groupedByStatus.isNotEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        color: colorScheme.primary,
+        child: ListView.builder(
+          key: const PageStorageKey('board_tab'),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          itemCount: _groupedByStatus.length,
+          addAutomaticKeepAlives: false,
+          itemBuilder: (context, idx) {
+            final entry = _groupedByStatus.entries.elementAt(idx);
+            final statusColor = _statusColor(entry.value.first.fields.status.statusCategory.key);
+            return Column(
+              key: ValueKey('status_${entry.key}'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${entry.key} (${entry.value.length})',
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...entry.value.map((issue) => IssueCard(
+                      key: ValueKey('issue_${issue.key}'),
+                      issue: issue,
+                      onTap: () => _openIssue(issue.key),
+                    )),
+              ],
+            );
+          },
+        ),
+      );
+    }
+
+    // Kanban board
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: colorScheme.primary,
+      child: ListView.builder(
+        key: const PageStorageKey('kanban_board_tab'),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        itemCount: _filteredIssues.length,
+        addAutomaticKeepAlives: false,
+        itemBuilder: (context, i) {
+          final issue = _filteredIssues[i];
+          return IssueCard(
+            key: ValueKey('issue_${issue.key}'),
+            issue: issue,
+            onTap: () => _openIssue(issue.key),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBacklogTab() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    if (_groupedBySprint.isEmpty) {
+      return _buildEmptyState(colorScheme, textTheme, isBacklog: true);
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: colorScheme.primary,
+      child: ListView.builder(
+        key: const PageStorageKey('backlog_tab'),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        itemCount: _groupedBySprint.length,
+        addAutomaticKeepAlives: false,
+        itemBuilder: (context, idx) {
+          final group = _groupedBySprint[idx];
+          final isBacklog = group.sprintId == null;
+          final isActiveSprint = _activeSprint != null && group.sprintId == _activeSprint!.id;
+          final isFirstUpcomingSprint = !isBacklog &&
+              group.sprintId != null &&
+              ((_activeSprint != null && idx == 1) || (_activeSprint == null && idx == 0));
+
+          // Calculate stats
+          final doneCount = group.issues.where((i) => i.fields.status.statusCategory.key == 'done').length;
+          final inProgressCount = group.issues.where((i) => i.fields.status.statusCategory.key == 'indeterminate').length;
+          final todoCount = group.issues.where((i) => i.fields.status.statusCategory.key != 'done' && i.fields.status.statusCategory.key != 'indeterminate').length;
+
+          return Column(
+            key: ValueKey('sprint_${group.sprintId ?? "backlog"}'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSprintHeader(group, isBacklog, isActiveSprint, isFirstUpcomingSprint, doneCount, inProgressCount, todoCount, colorScheme),
+              // Show issues if not collapsed
+              if (!(isBacklog ? _backlogCollapsed : (group.sprintId != null && _collapsedSprints.contains(group.sprintId!))))
+                ...group.issues.map((issue) => IssueCard(
+                      key: ValueKey('issue_${issue.key}'),
+                      issue: issue,
+                      onTap: () => _openIssue(issue.key),
+                    )),
+              if (isBacklog && _backlogHasMore)
+                _buildLoadMoreButton(colorScheme),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTimelineTab() {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    if (!_groupedByDueDate.entries.any((e) => e.value.isNotEmpty)) {
+      return _buildEmptyState(colorScheme, textTheme, isBacklog: false);
+    }
+
+    final timelineColors = <String, Color>{
+      'Overdue': colorScheme.error,
+      'Today': AppTheme.success,
+      'This week': colorScheme.primary,
+      'Next week': AppTheme.statusTodo,
+      'Later': colorScheme.onSurfaceVariant,
+      'No due date': colorScheme.outline,
+    };
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: colorScheme.primary,
+      child: ListView.builder(
+        key: const PageStorageKey('timeline_tab'),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        itemCount: _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).length,
+        addAutomaticKeepAlives: false,
+        itemBuilder: (context, idx) {
+          final entry = _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).elementAt(idx);
+          final color = timelineColors[entry.key] ?? AppTheme.textSecondary;
+          return Column(
+            key: ValueKey('duedate_${entry.key}'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.event, size: 18, color: color),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: color,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${AppLocalizations.of(context).timelineGroupLabel(entry.key)} (${entry.value.length})',
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ...entry.value.map((issue) => IssueCard(
+                    key: ValueKey('issue_${issue.key}'),
+                    issue: issue,
+                    onTap: () => _openIssue(issue.key),
+                  )),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ColorScheme colorScheme, TextTheme textTheme, {required bool isBacklog}) {
+    final isScrum = _selectedBoard != null && _selectedBoard!.type.toLowerCase() != 'kanban';
+    return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
@@ -1248,318 +1551,183 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
-    }
+  }
 
-    if (_activeTab == 0 && _selectedBoard!.type.toLowerCase() != 'kanban' && _groupedByStatus.isNotEmpty) {
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        color: colorScheme.primary,
-        child: ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          itemCount: _groupedByStatus.length,
-          itemBuilder: (context, idx) {
-            final entry = _groupedByStatus.entries.elementAt(idx);
-            final statusColor = _statusColor(entry.value.first.fields.status.statusCategory.key);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: statusColor,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${entry.key} (${entry.value.length})',
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...entry.value.map((issue) => IssueCard(
-                      issue: issue,
-                      onTap: () => _openIssue(issue.key),
-                    )),
-              ],
-            );
-          },
+  Widget _buildSprintHeader(
+    ({String sprint, int? sprintId, List<JiraIssue> issues}) group,
+    bool isBacklog,
+    bool isActiveSprint,
+    bool isFirstUpcomingSprint,
+    int doneCount,
+    int inProgressCount,
+    int todoCount,
+    ColorScheme colorScheme,
+  ) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          if (isBacklog) {
+            _backlogCollapsed = !_backlogCollapsed;
+          } else if (group.sprintId != null) {
+            if (_collapsedSprints.contains(group.sprintId!)) {
+              _collapsedSprints.remove(group.sprintId!);
+            } else {
+              _collapsedSprints.add(group.sprintId!);
+            }
+          }
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: isActiveSprint ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+          border: isActiveSprint
+              ? Border.all(color: colorScheme.primary, width: 2)
+              : null,
         ),
-      );
-    }
-
-    if (_activeTab == 2 && _groupedByDueDate.entries.any((e) => e.value.isNotEmpty)) {
-      final timelineColors = <String, Color>{
-        'Overdue': colorScheme.error,
-        'Today': AppTheme.success,
-        'This week': colorScheme.primary,
-        'Next week': AppTheme.statusTodo,
-        'Later': colorScheme.onSurfaceVariant,
-        'No due date': colorScheme.outline,
-      };
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        color: colorScheme.primary,
-        child: ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          itemCount: _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).length,
-          itemBuilder: (context, idx) {
-            final entry = _groupedByDueDate.entries.where((e) => e.value.isNotEmpty).elementAt(idx);
-            final color = timelineColors[entry.key] ?? AppTheme.textSecondary;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
+        child: Row(
+          children: [
+            Icon(
+              (isBacklog ? _backlogCollapsed : (group.sprintId != null && _collapsedSprints.contains(group.sprintId!)))
+                  ? Icons.chevron_right
+                  : Icons.expand_more,
+              size: 20,
+              color: colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Icon(Icons.event, size: 18, color: color),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                      Expanded(
                         child: Text(
-                          '${AppLocalizations.of(context).timelineGroupLabel(entry.key)} (${entry.value.length})',
-                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ...entry.value.map((issue) => IssueCard(
-                      issue: issue,
-                      onTap: () => _openIssue(issue.key),
-                    )),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    // Backlog tab: show sprint-grouped issues
-    if (_activeTab == 1 && _groupedBySprint.isNotEmpty) {
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        color: colorScheme.primary,
-        child: ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          itemCount: _groupedBySprint.length,
-          itemBuilder: (context, idx) {
-            final group = _groupedBySprint[idx];
-            final isBacklog = group.sprintId == null;
-            final isActiveSprint = _activeSprint != null && group.sprintId == _activeSprint!.id;
-            final isFirstUpcomingSprint = !isBacklog &&
-                group.sprintId != null &&
-                ((_activeSprint != null && idx == 1) || (_activeSprint == null && idx == 0));
-
-            // Calculate stats
-            final doneCount = group.issues.where((i) => i.fields.status.statusCategory.key == 'done').length;
-            final inProgressCount = group.issues.where((i) => i.fields.status.statusCategory.key == 'indeterminate').length;
-            final todoCount = group.issues.where((i) => i.fields.status.statusCategory.key != 'done' && i.fields.status.statusCategory.key != 'indeterminate').length;
-            
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      if (isBacklog) {
-                        _backlogCollapsed = !_backlogCollapsed;
-                      } else if (group.sprintId != null) {
-                        if (_collapsedSprints.contains(group.sprintId!)) {
-                          _collapsedSprints.remove(group.sprintId!);
-                        } else {
-                          _collapsedSprints.add(group.sprintId!);
-                        }
-                      }
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: isActiveSprint ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
-                      border: isActiveSprint
-                          ? Border.all(color: colorScheme.primary, width: 2)
-                          : null,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          (isBacklog ? _backlogCollapsed : (group.sprintId != null && _collapsedSprints.contains(group.sprintId!)))
-                              ? Icons.chevron_right
-                              : Icons.expand_more,
-                          size: 20,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      isBacklog ? '📋 ${AppLocalizations.of(context).backlog}' : '🏃 ${group.sprint}',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w700,
-                                        color: colorScheme.onSurface,
-                                      ),
-                                    ),
-                                  ),
-                                  if (isActiveSprint)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: colorScheme.primary,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        AppLocalizations.of(context).active,
-                                        style: TextStyle(
-                                          color: colorScheme.onPrimary,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  if (!isBacklog && group.sprintId != null)
-                                    PopupMenuButton<String>(
-                                      padding: EdgeInsets.zero,
-                                      icon: Icon(Icons.more_vert, size: 20, color: colorScheme.onSurfaceVariant),
-                                      onSelected: (value) {
-                                        if (value == 'complete') {
-                                          _completeSprint(group.sprintId!, group.sprint);
-                                        } else if (value == 'start') {
-                                          _startSprint(group.sprintId!, group.sprint);
-                                        } else if (value == 'update') {
-                                          _openUpdateSprint(group.sprintId!, group.sprint);
-                                        } else if (value == 'delete') {
-                                          _confirmDeleteSprint(group.sprintId!, group.sprint);
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        if (isActiveSprint)
-                                          PopupMenuItem(
-                                            value: 'complete',
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.check_circle_outline, size: 20, color: colorScheme.primary),
-                                                const SizedBox(width: 8),
-                                                Text(AppLocalizations.of(context).completeSprint),
-                                              ],
-                                            ),
-                                          ),
-                                        if (isFirstUpcomingSprint)
-                                          PopupMenuItem(
-                                            value: 'start',
-                                            child: Row(
-                                              children: [
-                                                Icon(Icons.play_arrow, size: 20, color: colorScheme.primary),
-                                                const SizedBox(width: 8),
-                                                Text(AppLocalizations.of(context).startSprint),
-                                              ],
-                                            ),
-                                          ),
-                                        PopupMenuItem(
-                                          value: 'update',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.edit, size: 20, color: colorScheme.onSurfaceVariant),
-                                              const SizedBox(width: 8),
-                                              Text(AppLocalizations.of(context).updateSprint),
-                                            ],
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'delete',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
-                                              const SizedBox(width: 8),
-                                              Text(AppLocalizations.of(context).deleteSprint, style: TextStyle(color: colorScheme.error, fontWeight: FontWeight.w600)),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                ],
-                              ),
-                              if (group.issues.isNotEmpty) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${group.issues.length} issues  •  ✅ $doneCount  •  🔄 $inProgressCount  •  📝 $todoCount',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ],
+                          isBacklog ? '📋 ${AppLocalizations.of(context).backlog}' : '🏃 ${group.sprint}',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onSurface,
                           ),
                         ),
+                      ),
+                      if (isActiveSprint)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: colorScheme.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            AppLocalizations.of(context).active,
+                            style: TextStyle(
+                              color: colorScheme.onPrimary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      if (!isBacklog && group.sprintId != null)
+                        _buildSprintMenu(group.sprintId!, group.sprint, isActiveSprint, isFirstUpcomingSprint, colorScheme),
+                    ],
+                  ),
+                  if (group.issues.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          '${group.issues.length} issues',
+                          style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(width: 12),
+                        if (doneCount > 0) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(color: AppTheme.statusDone, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 4),
+                          Text('$doneCount', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                          const SizedBox(width: 8),
+                        ],
+                        if (inProgressCount > 0) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(color: AppTheme.statusInProgress, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 4),
+                          Text('$inProgressCount', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                          const SizedBox(width: 8),
+                        ],
+                        if (todoCount > 0) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(color: AppTheme.statusTodo, shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 4),
+                          Text('$todoCount', style: TextStyle(fontSize: 11, color: colorScheme.onSurfaceVariant)),
+                        ],
                       ],
                     ),
-                  ),
-                ),
-                // Show issues if not collapsed
-                if (!(isBacklog ? _backlogCollapsed : (group.sprintId != null && _collapsedSprints.contains(group.sprintId!))))
-                  ...group.issues.map((issue) => IssueCard(
-                        issue: issue,
-                        onTap: () => _openIssue(issue.key),
-                      )),
-                if (isBacklog && _backlogHasMore)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Center(
-                      child: _backlogLoadingMore
-                          ? SizedBox(
-                              height: 32,
-                              width: 32,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: colorScheme.primary),
-                            )
-                          : TextButton.icon(
-                              onPressed: _loadMoreBacklog,
-                              icon: Icon(Icons.add_circle_outline, size: 20, color: colorScheme.primary),
-                              label: Text(
-                                AppLocalizations.of(context).loadMore,
-                                style: TextStyle(color: colorScheme.primary),
-                              ),
-                            ),
-                    ),
-                  ),
-                const SizedBox(height: 12),
-              ],
-            );
-          },
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      color: colorScheme.primary,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        itemCount: _filteredIssues.length,
-        itemBuilder: (context, i) {
-          final issue = _filteredIssues[i];
-          return IssueCard(issue: issue, onTap: () => _openIssue(issue.key));
-        },
       ),
     );
   }
+
+  Widget _buildSprintMenu(int sprintId, String sprintName, bool isActiveSprint, bool isFirstUpcomingSprint, ColorScheme colorScheme) {
+    return PopupMenuButton<String>(
+      padding: EdgeInsets.zero,
+      icon: Icon(Icons.more_vert, size: 20, color: colorScheme.onSurfaceVariant),
+      onSelected: (value) {
+        if (value == 'complete') {
+          _completeSprint(sprintId, sprintName);
+        } else if (value == 'start') {
+          _startSprint(sprintId, sprintName);
+        } else if (value == 'update') {
+          _openUpdateSprint(sprintId, sprintName);
+        } else if (value == 'delete') {
+          _confirmDeleteSprint(sprintId, sprintName);
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        if (isActiveSprint)
+          PopupMenuItem(value: 'complete', child: Text(AppLocalizations.of(context).completeSprint)),
+        if (!isActiveSprint && isFirstUpcomingSprint)
+          PopupMenuItem(value: 'start', child: Text(AppLocalizations.of(context).startSprint)),
+        PopupMenuItem(value: 'update', child: Text(AppLocalizations.of(context).updateSprint)),
+        PopupMenuItem(value: 'delete', child: Text(AppLocalizations.of(context).deleteSprint)),
+      ],
+    );
+  }
+
+  Widget _buildLoadMoreButton(ColorScheme colorScheme) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: _backlogLoadingMore
+            ? const CircularProgressIndicator(strokeWidth: 2)
+            : TextButton.icon(
+                onPressed: _loadMoreBacklog,
+                icon: const Icon(Icons.expand_more, size: 18),
+                label: Text(
+                  AppLocalizations.of(context).loadMore,
+                  style: TextStyle(color: colorScheme.primary),
+                ),
+              ),
+      ),
+    );
+  }
+
+  // Remove duplicate code below - keeping only the new structure
 
   Color _statusColor(String? key) {
     switch (key?.toLowerCase()) {
@@ -1607,6 +1775,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               itemCount: _boards.length + (_hasMoreBoards ? 1 : 0),
+              addAutomaticKeepAlives: false,
               itemBuilder: (context, i) {
                 if (i >= _boards.length) {
                   return Padding(

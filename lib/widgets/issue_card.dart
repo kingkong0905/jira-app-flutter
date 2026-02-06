@@ -31,7 +31,8 @@ class IssueCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
 
-    return Card(
+    return RepaintBoundary(
+      child: Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       margin: const EdgeInsets.only(bottom: 12),
@@ -117,21 +118,39 @@ class IssueCard extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor: colorScheme.primary,
-                          backgroundImage: issue.fields.assignee!.avatar48 != null
-                              ? NetworkImage(issue.fields.assignee!.avatar48!)
-                              : null,
-                          child: issue.fields.assignee!.avatar48 == null
-                              ? Text(
+                        issue.fields.assignee!.avatar48 != null
+                            ? ClipOval(
+                                child: Image.network(
+                                  issue.fields.assignee!.avatar48!,
+                                  width: 24,
+                                  height: 24,
+                                  cacheWidth: 48,
+                                  cacheHeight: 48,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return CircleAvatar(
+                                      radius: 12,
+                                      backgroundColor: colorScheme.primary,
+                                      child: Text(
+                                        issue.fields.assignee!.displayName.isNotEmpty
+                                            ? issue.fields.assignee!.displayName[0].toUpperCase()
+                                            : '?',
+                                        style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              )
+                            : CircleAvatar(
+                                radius: 12,
+                                backgroundColor: colorScheme.primary,
+                                child: Text(
                                   issue.fields.assignee!.displayName.isNotEmpty
                                       ? issue.fields.assignee!.displayName[0].toUpperCase()
                                       : '?',
                                   style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
-                                )
-                              : null,
-                        ),
+                                ),
+                              ),
                         const SizedBox(width: 6),
                         Text(
                           issue.fields.assignee!.displayName,
@@ -150,6 +169,7 @@ class IssueCard extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
