@@ -123,9 +123,15 @@ class JiraApiService {
   // Cache and Timeout
   JiraConfig? _config;
   final Map<String, _CacheEntry> _cache = {};
-  static const _cacheDurationMs = 5 * 60 * 1000; // 5 min
-  static const _issuesCacheMs = 60 * 1000; // 1 min for board issues
-  static const _issueDetailsCacheMs = 2 * 60 * 1000; // 2 min
+
+  /// Cache durations optimized for different data types:
+  /// - Boards/Sprints/Priorities: 5 minutes (relatively stable data)
+  /// - Issue lists (board/sprint issues): 30 seconds (frequently changing)
+  /// - Issue details: 1 minute (moderate change frequency)
+  /// - Backlog pages: 30 seconds (frequently changing with sprint moves)
+  static const _cacheDurationMs = 5 * 60 * 1000; // 5 min for boards, sprints, priorities
+  static const _issuesCacheMs = 30 * 1000; // 30 sec for issue lists (optimized from 1 min)
+  static const _issueDetailsCacheMs = 60 * 1000; // 1 min for issue details (optimized from 2 min)
   static const _timeout = Duration(seconds: 45); // Increased from 25s to handle heavy loads
   static const _connectionTestTimeout = Duration(seconds: 30);
 
@@ -213,6 +219,24 @@ class JiraApiService {
     _cache[key] = _CacheEntry(data: data, at: DateTime.now());
   }
 
+  // ============================================================================
+  // CACHE MANAGEMENT
+  // ============================================================================
+  //
+  // Caching Strategy:
+  // 1. Granular invalidation: Clear only affected caches instead of all caches
+  // 2. Operation-specific clearing:
+  //    - Sprint create/update/delete → _clearSprintCache(boardId)
+  //    - Issue create → _clearAllIssuesCaches()
+  //    - Issue update → _clearIssueCache(issueKey) + assignees if assignee changed
+  //    - Issue delete → _clearIssueCache(issueKey)
+  // 3. Cache durations optimized by data volatility:
+  //    - Stable data (boards, priorities): 5 minutes
+  //    - Moderate (issue lists): 30 seconds
+  //    - Details: 1 minute
+  //
+  // ============================================================================
+
   void clearCache() {
     _cache.clear();
   }
@@ -231,8 +255,43 @@ class JiraApiService {
 
   /// Clear caches related to a board (board issues, sprints, assignees).
   void _clearBoardCache(int boardId) {
-    _cache.removeWhere((key, _) => 
+    _cache.removeWhere((key, _) =>
       key.contains('$_endpointAgileBoard/$boardId'));
+  }
+
+  /// Clear caches related to sprints for a board (more granular than clearCache).
+  /// This is called when a sprint is created, updated, deleted, started, or completed.
+  void _clearSprintCache(int boardId) {
+    // Clear sprint list cache for this board
+    _cache.remove(_cacheKey('$_endpointAgileBoard/$boardId/sprint', {}));
+    // Clear sprint issues caches for this board
+    _cache.removeWhere((key, _) =>
+      key.contains('$_endpointAgileBoard/$boardId/sprint') && key.contains('/issue'));
+    // Clear backlog caches (sprint changes affect backlog)
+    _cache.removeWhere((key, _) =>
+      key.contains('$_endpointAgileBoard/$boardId/backlog'));
+    // Clear board issues caches (sprint changes may affect board view)
+    _cache.removeWhere((key, _) =>
+      key.contains('$_endpointAgileBoard/$boardId/issue'));
+    // Clear assignees cache (sprint changes may affect visible assignees)
+    _cache.remove(_cacheKey('$_endpointAgileBoard/$boardId/assignees', {}));
+  }
+
+  /// Clear all ticket/issue related caches across all boards.
+  /// This is called when an issue is created.
+  void _clearAllIssuesCaches() {
+    // Clear all board issues caches
+    _cache.removeWhere((key, _) =>
+      key.contains(_endpointAgileBoard) && key.contains('/issue'));
+    // Clear all sprint issues caches
+    _cache.removeWhere((key, _) =>
+      key.contains(_endpointAgileBoard) && key.contains('/sprint'));
+    // Clear all backlog caches
+    _cache.removeWhere((key, _) =>
+      key.contains(_endpointAgileBoard) && key.contains('/backlog'));
+    // Clear all assignees caches (new issue may add new assignee)
+    _cache.removeWhere((key, _) =>
+      key.contains('/assignees'));
   }
 
   /// Returns null on success, or an error message string on failure.
@@ -564,7 +623,7 @@ class JiraApiService {
       ).timeout(_timeout);
 
       if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
-        clearCache();
+        _clearSprintCache(boardId);
         return null; // Success
       }
 
@@ -1199,17 +1258,25 @@ class JiraApiService {
   }
 
   /// Update issue fields (assignee, priority, duedate, summary, description, customfield_10016, etc.). Same as reference.
+  /// Clears relevant caches when fields that affect sorting/filtering are updated.
   Future<String?> updateIssueField(String issueKey, Map<String, dynamic> fields) async {
     final body = jsonEncode({_jsonKeyFields: fields});
-      final r = await http.put(
-        Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey'),
-        headers: _headers,
-        body: body,
-      ).timeout(_timeout);
-      if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
-        _clearIssueCache(issueKey);
-        return null;
+    final r = await http.put(
+      Uri.parse('$_baseUrl$_endpointApi3Issue/$issueKey'),
+      headers: _headers,
+      body: body,
+    ).timeout(_timeout);
+    if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
+      // Clear issue-specific cache
+      _clearIssueCache(issueKey);
+
+      // If assignee is being updated, also clear assignees caches
+      if (fields.containsKey(_fieldAssignee)) {
+        _cache.removeWhere((key, _) => key.contains('/assignees'));
       }
+
+      return null;
+    }
     return r.body;
   }
 
@@ -1368,7 +1435,8 @@ class JiraApiService {
     return r.body;
   }
 
-  Future<void> completeSprint(int sprintId) async {
+  /// Complete a sprint. boardId is needed for cache invalidation.
+  Future<void> completeSprint(int sprintId, int boardId) async {
     final r = await http
         .post(
           Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'),
@@ -1377,11 +1445,12 @@ class JiraApiService {
         )
         .timeout(_timeout);
     if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
-    clearCache();
+    _clearSprintCache(boardId);
   }
 
   /// Start a future sprint (set state to active). Sprint must be in 'future' and have startDate/endDate.
-  Future<void> startSprint(int sprintId) async {
+  /// boardId is needed for cache invalidation.
+  Future<void> startSprint(int sprintId, int boardId) async {
     final r = await http
         .post(
           Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'),
@@ -1390,12 +1459,14 @@ class JiraApiService {
         )
         .timeout(_timeout);
     if (r.statusCode != HttpConstants.statusOk) throw JiraApiException(r.statusCode, r.body);
-    clearCache();
+    _clearSprintCache(boardId);
   }
 
   /// Update sprint. PUT /rest/agile/1.0/sprint/{sprintId}
+  /// boardId is needed for cache invalidation.
   Future<String?> updateSprint({
     required int sprintId,
+    required int boardId,
     required String name,
     String? goal,
     String? startDate,
@@ -1414,7 +1485,7 @@ class JiraApiService {
           )
           .timeout(_timeout);
       if (r.statusCode != HttpConstants.statusOk) return 'Failed to update sprint: ${r.statusCode}';
-      clearCache();
+      _clearSprintCache(boardId);
       return null;
     } catch (e) {
       return e.toString();
@@ -1423,13 +1494,14 @@ class JiraApiService {
 
   /// Delete sprint. DELETE /rest/agile/1.0/sprint/{sprintId}
   /// Accepts 200 OK or 204 No Content as success.
-  Future<String?> deleteSprint(int sprintId) async {
+  /// boardId is needed for cache invalidation.
+  Future<String?> deleteSprint(int sprintId, int boardId) async {
     try {
       final r = await http
           .delete(Uri.parse('$_baseUrl$_endpointAgileSprint/$sprintId'), headers: _headers)
           .timeout(_timeout);
       if (r.statusCode != HttpConstants.statusOk && r.statusCode != HttpConstants.statusNoContent) return 'Failed to delete sprint: ${r.statusCode}';
-      clearCache();
+      _clearSprintCache(boardId);
       return null;
     } catch (e) {
       return e.toString();
@@ -1558,13 +1630,14 @@ class JiraApiService {
       if (r.statusCode >= HttpConstants.statusSuccessMin && r.statusCode <= HttpConstants.statusSuccessMax) {
         final responseJson = jsonDecode(r.body) as Map<String, dynamic>;
         final issueKey = responseJson[_jsonKeyKey] as String?;
-        
+
         // If sprint is specified, move the issue to the sprint
         if (sprintId != null && issueKey != null) {
           await _moveIssueToSprint(issueKey, sprintId);
         }
-        
-        clearCache();
+
+        // Clear all issue-related caches since new issue affects board/sprint/backlog views
+        _clearAllIssuesCaches();
         return null;
       }
 

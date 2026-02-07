@@ -74,6 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _lastBacklogIssuesHashCode = 0;
   int? _lastLoadedBoardId;
   String _lastLoadedAssignee = 'all';
+  bool _timelineDataLoaded = false; // Track if timeline data has been loaded
 
   /// Backlog screen shows User Story, Story, Bug, Task (no Epic, Sub-task, etc.)
   static const _backlogAllowedIssueTypes = {'user story', 'story', 'bug', 'task'};
@@ -205,7 +206,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _hasMoreBoards = !res.isLast;
         if (toSelect != null) _selectedBoard = toSelect;
       });
-      if (toSelect != null) await _loadIssuesForBoard(toSelect.id);
+      if (toSelect != null) {
+        // Reset timeline loaded flag when switching boards
+        _timelineDataLoaded = false;
+        await _loadIssuesForBoard(toSelect.id);
+      }
     } catch (e) {
       setState(() {
         _error = e.toString().replaceAll('JiraApiException(', '').replaceAll(')', '');
@@ -239,6 +244,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadIssuesForBoard(int boardId, {int? targetTab}) async {
     final api = context.read<JiraApiService>();
     final tab = targetTab ?? _activeTab;
+
+    // Skip loading if Timeline tab and it's not the target tab
+    // Timeline shares data with Board, so only load when explicitly requested
+    if (tab != 2 && targetTab != 2 && _activeTab != 2) {
+      // Reset timeline loaded flag when loading other tabs
+      _timelineDataLoaded = false;
+    }
+
     setState(() {
       _loading = true;
       if (tab == 0) _loadingBoardData = true;
@@ -263,7 +276,10 @@ class _HomeScreenState extends State<HomeScreen> {
           _sprints = sprintsData;
           _activeSprint = sprintsData.where((s) => s.state == 'active').firstOrNull;
         });
-        if ((tab == 0 || tab == 2) && _activeSprint != null) {
+
+        // Only load sprint issues for Board tab (0)
+        // Timeline tab (2) will load separately when clicked
+        if (tab == 0 && _activeSprint != null) {
           final issues = await api.getSprintIssues(
             boardId,
             _activeSprint!.id,
@@ -271,11 +287,26 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           setState(() {
             _issues = issues;
-            // Keep previous _backlogIssues so switching back to Backlog shows them until reload
             _assignees = assigneesData;
             _loading = false;
             _loadingBoardData = false;
+          });
+          return;
+        }
+
+        // Load sprint issues specifically for Timeline tab (2)
+        if (tab == 2 && _activeSprint != null) {
+          final issues = await api.getSprintIssues(
+            boardId,
+            _activeSprint!.id,
+            assignee: _selectedAssignee == 'all' ? null : _selectedAssignee,
+          );
+          setState(() {
+            _issues = issues;
+            _assignees = assigneesData;
+            _loading = false;
             _loadingTimelineData = false;
+            _timelineDataLoaded = true;
           });
           return;
         }
@@ -418,7 +449,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _refreshing = true);
+    setState(() {
+      _refreshing = true;
+      // Reset timeline loaded flag on refresh
+      _timelineDataLoaded = false;
+    });
     _boardsStartAt = 0;
     _hasMoreBoards = true;
     if (_selectedBoard != null) {
@@ -485,6 +520,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<JiraIssue> get _displayIssues {
     if (_activeTab == 1) return _backlogIssues;
+    // Timeline tab: only show data if explicitly loaded
+    if (_activeTab == 2 && !_timelineDataLoaded) return [];
     // Board and Timeline both use _issues (sprint for scrum, board for kanban)
     return _issues;
   }
@@ -1138,13 +1175,22 @@ class _HomeScreenState extends State<HomeScreen> {
         if (_activeTab == index) return; // Already on this tab, no need to reload
         setState(() => _activeTab = index);
 
-        // Only reload if board/assignee changed or we don't have data for this tab
-        final needsReload = _selectedBoard == null ||
-            _lastLoadedBoardId != _selectedBoard!.id ||
-            _lastLoadedAssignee != _selectedAssignee ||
-            (index == 0 && _issues.isEmpty) ||
-            (index == 1 && _backlogIssues.isEmpty) ||
-            (index == 2 && _issues.isEmpty);
+        // Determine if we need to reload data for this tab
+        bool needsReload = false;
+
+        if (_selectedBoard == null) {
+          needsReload = false; // Can't load without a board
+        } else if (_lastLoadedBoardId != _selectedBoard!.id || _lastLoadedAssignee != _selectedAssignee) {
+          needsReload = true; // Board or assignee changed, always reload
+        } else if (index == 0 && _issues.isEmpty) {
+          needsReload = true; // Board tab needs data
+        } else if (index == 1 && _backlogIssues.isEmpty) {
+          needsReload = true; // Backlog tab needs data
+        } else if (index == 2) {
+          // Timeline tab: reload if not loaded yet OR if data is empty
+          // Even if Board loaded data, we mark Timeline as needing explicit load
+          needsReload = !_timelineDataLoaded || _issues.isEmpty;
+        }
 
         if (_selectedBoard != null && needsReload) {
           await _loadIssuesForBoard(_selectedBoard!.id, targetTab: index);
@@ -1814,6 +1860,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {
                       _selectedBoard = b;
                       _boardDropdownOpen = false;
+                      // Reset timeline loaded flag when switching boards
+                      _timelineDataLoaded = false;
                     });
                     await _loadIssuesForBoard(b.id);
                   },
@@ -1933,12 +1981,15 @@ class _HomeScreenState extends State<HomeScreen> {
     DateTime? startDate,
     DateTime? endDate,
   ) async {
+    if (_selectedBoard == null) return;
+
     try {
       final api = context.read<JiraApiService>();
       final startStr = startDate != null ? DateFormat('yyyy-MM-dd').format(startDate) : null;
       final endStr = endDate != null ? DateFormat('yyyy-MM-dd').format(endDate) : null;
       final error = await api.updateSprint(
         sprintId: sprintId,
+        boardId: _selectedBoard!.id,
         name: name,
         goal: goal.isNotEmpty ? goal : null,
         startDate: startStr,
@@ -1976,11 +2027,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !mounted || _selectedBoard == null) return;
 
     try {
       final api = context.read<JiraApiService>();
-      final error = await api.deleteSprint(sprintId);
+      final error = await api.deleteSprint(sprintId, _selectedBoard!.id);
       if (error != null) {
         _showSnack(AppLocalizations.of(context).failedToDeleteSprint(error), isError: true);
       } else {
@@ -1995,9 +2046,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _completeSprint(int sprintId, String sprintName) async {
+    if (_selectedBoard == null) return;
+
     try {
       final api = context.read<JiraApiService>();
-      await api.completeSprint(sprintId);
+      await api.completeSprint(sprintId, _selectedBoard!.id);
       if (mounted) {
         _showSnack(AppLocalizations.of(context).sprintCompleted);
         if (_selectedBoard != null) {
@@ -2012,9 +2065,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _startSprint(int sprintId, String sprintName) async {
+    if (_selectedBoard == null) return;
+
     try {
       final api = context.read<JiraApiService>();
-      await api.startSprint(sprintId);
+      await api.startSprint(sprintId, _selectedBoard!.id);
       if (mounted) {
         _showSnack(AppLocalizations.of(context).sprintStarted);
         if (_selectedBoard != null) {
